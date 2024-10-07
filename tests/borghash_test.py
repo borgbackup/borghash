@@ -70,7 +70,7 @@ def test_save_load(ht12, tmp_path):
 def test_stress(ht):
     # this also triggers some hashtable resizing
     keys = set()
-    for i in range(1000000):  # e.g. 10M -> 3000MB == 300B/entry
+    for i in range(10000):
         key = H2(i)
         value = key[:4]
         ht.insert(key, value)

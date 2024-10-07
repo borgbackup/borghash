@@ -1,6 +1,6 @@
 # distutils: language=c++
 """
-cyhash - a hashtable in cython mapping 256bit fully random keys to
+borghash - a hashtable in cython mapping 256bit fully random keys to
 a bytes value (length can be chosen, but is fixed afterwards).
 """
 
