@@ -15,10 +15,6 @@ cdef uint32_t TOMBSTONE_BUCKET = 0xFFFFFFFE
 
 _NoDefault = object()
 
-cdef struct KeyValue:
-    uint8_t key[32]
-    uint8_t value[32]
-
 cdef class HashTable:
     cdef int ksize, vsize
     cdef int capacity, used, tombstones
@@ -26,7 +22,8 @@ cdef class HashTable:
     cdef uint32_t* table
     cdef int kv_capacity, kv_used
     cdef float kv_grow_factor
-    cdef KeyValue* kv
+    cdef uint8_t* keys
+    cdef uint8_t* values
 
     def __init__(self, key_size: int, value_size: int, capacity: int = MIN_CAPACITY,
                  max_load_factor: float = 0.5, min_load_factor: float = 0.10,
@@ -50,16 +47,19 @@ cdef class HashTable:
         for i in range(self.capacity):
             self.table[i] = FREE_BUCKET
         # ^^^ hash table ^^^
-        # vvv kv array vvv
+        # vvv kv arrays vvv
         self.kv_capacity = int(capacity * max_load_factor)
         self.kv_used = 0
         self.kv_grow_factor = kv_grow_factor
-        self.kv = <KeyValue*> malloc(self.kv_capacity * sizeof(KeyValue))
-        # ^^^ kv array ^^^
+        self.keys = <uint8_t*> malloc(self.kv_capacity * self.ksize * sizeof(uint8_t))
+        self.values = <uint8_t*> malloc(self.kv_capacity * self.vsize * sizeof(uint8_t))
+        # ^^^ kv arrays ^^^
+
 
     def __del__(self):
         free(self.table)
-        free(self.kv)
+        free(self.keys)
+        free(self.values)
 
     def __len__(self):
         return self.used
@@ -80,8 +80,8 @@ cdef class HashTable:
         cdef int index = self.get_index(key_ptr)
         while self.table[index] not in (FREE_BUCKET, TOMBSTONE_BUCKET):
             kv_index = self.table[index]
-            if memcmp(self.kv[kv_index].key, key_ptr, self.ksize) == 0:
-                memcpy(<void *> self.kv[kv_index].value, value_ptr, self.vsize)
+            if memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
+                memcpy(self.values + kv_index * self.vsize, value_ptr, self.vsize)
                 return
             index = (index + 1) % self.capacity
 
@@ -89,8 +89,8 @@ cdef class HashTable:
             self.resize_kv(int(self.kv_capacity * self.kv_grow_factor))
 
         kv_index = self.kv_used
-        memcpy(<void *> self.kv[kv_index].key, key_ptr, self.ksize)
-        memcpy(<void *> self.kv[kv_index].value, value_ptr, self.vsize)
+        memcpy(self.keys + kv_index * self.ksize, key_ptr, self.ksize)
+        memcpy(self.values + kv_index * self.vsize, value_ptr, self.vsize)
         self.kv_used += 1
 
         if self.table[index] == TOMBSTONE_BUCKET:
@@ -107,7 +107,7 @@ cdef class HashTable:
         cdef uint32_t kv_index
         while self.table[index] != FREE_BUCKET:
             kv_index = self.table[index]
-            if self.table[index] != TOMBSTONE_BUCKET and memcmp(self.kv[kv_index].key, key_ptr, self.ksize) == 0:
+            if self.table[index] != TOMBSTONE_BUCKET and memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
                 return kv_index
             index = (index + 1) % self.capacity
             if index == original_index:
@@ -128,7 +128,7 @@ cdef class HashTable:
         if kv_index == <uint32_t> 0xffffffff:
             raise KeyError("Key not found")
         else:
-            return self.kv[kv_index].value[:self.vsize]
+            return self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
 
     def setdefault(self, key: bytes, value: bytes):
         if not key in self:
@@ -163,9 +163,9 @@ cdef class HashTable:
 
         while self.table[index] != FREE_BUCKET:
             kv_index = self.table[index]
-            if kv_index != TOMBSTONE_BUCKET and memcmp(self.kv[kv_index].key, key_ptr, self.ksize) == 0:
-                memset(self.kv[kv_index].key, 0, self.ksize)
-                memset(self.kv[kv_index].value, 0, self.vsize)
+            if kv_index != TOMBSTONE_BUCKET and memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
+                memset(self.keys + kv_index * self.ksize, 0, self.ksize)
+                memset(self.values + kv_index * self.vsize, 0, self.vsize)
                 self.table[index] = TOMBSTONE_BUCKET
                 self.used -= 1
                 self.tombstones += 1
@@ -186,8 +186,8 @@ cdef class HashTable:
         for i in range(self.capacity):
             kv_index = self.table[i]
             if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
-                key = self.kv[kv_index].key[:self.ksize]
-                value = self.kv[kv_index].value[:self.vsize]
+                key = self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
+                value = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
                 yield key, value
 
     cdef void resize_table(self, int new_capacity):
@@ -202,7 +202,7 @@ cdef class HashTable:
         for i in range(current_capacity):
             kv_index = self.table[i]
             if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
-                index = self.get_index(self.kv[kv_index].key)
+                index = self.get_index(self.keys + kv_index * self.ksize)
                 while new_table[index] != FREE_BUCKET:
                     index = (index + 1) % new_capacity
                 new_table[index] = kv_index
@@ -211,9 +211,10 @@ cdef class HashTable:
         self.table = new_table
         self.tombstones = 0
 
-    cdef void resize_kv(self, int new_size):
-        self.kv = <KeyValue*> realloc(self.kv, new_size * sizeof(KeyValue))
-        self.kv_capacity = new_size
+    cdef void resize_kv(self, int new_capacity):
+        self.keys = <uint8_t*> realloc(self.keys, new_capacity * self.ksize * sizeof(uint8_t))
+        self.values = <uint8_t*> realloc(self.values, new_capacity * self.vsize * sizeof(uint8_t))
+        self.kv_capacity = new_capacity
 
     def write(self, file):
         if isinstance(file, (str, bytes)):
@@ -228,8 +229,8 @@ cdef class HashTable:
         for i in range(self.capacity):
             kv_index = self.table[i]
             if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
-                key_bytes = self.kv[kv_index].key[:self.ksize]
-                value_bytes = self.kv[kv_index].value[:self.vsize]
+                key_bytes = self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
+                value_bytes = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
                 entries.append((key_bytes, value_bytes))
         data = {
             'ksize': self.ksize,
