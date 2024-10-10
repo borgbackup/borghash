@@ -1,218 +1,259 @@
-# distutils: language=c++
 """
-borghash - a hashtable in cython mapping 256bit fully random keys to
-a bytes value (length can be chosen, but is fixed afterwards).
+borghash - a hashtable in cython mapping fully random bytes keys to bytes values.
+key and values length can be chosen, but is fixed afterwards.
 """
-
-from libc.stdint cimport uint32_t, uint8_t
-from libcpp.vector cimport vector
-from libcpp.utility cimport pair
-
+from libc.stdlib cimport malloc, free, realloc
+from libc.string cimport memcpy, memset, memcmp
+from libc.stdint cimport uint8_t, uint32_t
 import msgpack
 
 
-cdef vector[uint32_t] _key_to_vector(bytes key):
-    """256bit key to vector of uint32_t."""
-    cdef vector[uint32_t] bkey
-    assert len(key) * 8 == 256, f"Expected 256bit key, got {len(key) * 8}bit!"
-    for i in range(0, 32, 4):  # Process the key in 4-byte (32-bit) chunks
-        part = <uint32_t> (int.from_bytes(key[i:i + 4], byteorder='little'))
-        bkey.push_back(part)
-    return bkey
+MIN_CAPACITY = 1000  # never shrink the hash table below this capacity
 
+cdef uint32_t FREE_BUCKET = 0xFFFFFFFF
+cdef uint32_t TOMBSTONE_BUCKET = 0xFFFFFFFE
 
-cdef bytes _vector_to_key(vector[uint32_t] bkey):
-    """vector of uint32_t to 256bit key."""
-    cdef bytes key_bytes = b''.join([k.to_bytes(4, byteorder='little') for k in bkey])
-    return key_bytes
-
-
-cdef vector[uint8_t] _value_to_vector(bytes value, int value_size):
-    """value to vector of uint8_t."""
-    cdef vector[uint8_t] bvalue
-    assert len(value) == value_size, f"Expected value length of {value_size} bytes, got {len(value)}"
-    bvalue.reserve(value_size)
-    for i in range(value_size):
-        bvalue.push_back(value[i])
-    return bvalue
-
-
-cdef bytes _vector_to_value(vector[uint8_t] bvalue):
-    """vector of uint8_t to value."""
-    return bytes([bvalue[i] for i in range(bvalue.size())])
-
+_NoDefault = object()
 
 cdef class HashTable:
-    cdef int size
-    cdef int value_size
-    cdef float max_load_factor
-    cdef float min_load_factor
-    cdef int num_entries
-    cdef vector[vector[pair[vector[uint32_t], vector[uint8_t]]]] table  # Table with chaining for collisions
+    cdef int ksize, vsize
+    cdef int capacity, used, tombstones
+    cdef float max_load_factor, min_load_factor, shrink_factor, grow_factor
+    cdef uint32_t* table
+    cdef int kv_capacity, kv_used
+    cdef float kv_grow_factor
+    cdef uint8_t* keys
+    cdef uint8_t* values
 
-    def __init__(self, size=100, value_size=4, max_load_factor=0.75, min_load_factor=0.3):
-        self.size = size
-        self.value_size = value_size  # Size of the stored values in bytes
+    def __init__(self, key_size: int, value_size: int, capacity: int = MIN_CAPACITY,
+                 max_load_factor: float = 0.5, min_load_factor: float = 0.10,
+                 shrink_factor: float = 0.4, grow_factor: float = 2.0,
+                 kv_grow_factor: float = 1.3):
+        # the load of the ht (.table) shall be between 0.25 and 0.5, so it is fast and has few collisions.
+        # it is cheap to have a low hash table load, because .table only stores uint32_t indexes into .kv.
+        # the kv array has bigger elements and is not a hash table, thus collisions and load factor are
+        # no concern there. the kv_grow_factor can be relatively small.
+        self.ksize = key_size
+        self.vsize = value_size
+        # vvv hash table vvv
+        self.capacity = capacity
+        self.used = 0
+        self.tombstones = 0
         self.max_load_factor = max_load_factor
         self.min_load_factor = min_load_factor
-        self.num_entries = 0
-        self.table = vector[vector[pair[vector[uint32_t], vector[uint8_t]]]](<int> size)
+        self.shrink_factor = shrink_factor
+        self.grow_factor = grow_factor
+        self.table = <uint32_t*> malloc(self.capacity * sizeof(uint32_t))
+        for i in range(self.capacity):
+            self.table[i] = FREE_BUCKET
+        # ^^^ hash table ^^^
+        # vvv kv arrays vvv
+        self.kv_capacity = int(capacity * max_load_factor)
+        self.kv_used = 0
+        self.kv_grow_factor = kv_grow_factor
+        self.keys = <uint8_t*> malloc(self.kv_capacity * self.ksize * sizeof(uint8_t))
+        self.values = <uint8_t*> malloc(self.kv_capacity * self.vsize * sizeof(uint8_t))
+        # ^^^ kv arrays ^^^
 
-    cdef int _index(self, vector[uint32_t] key_vector, int table_size):
-        cdef uint32_t idx = key_vector[0] % table_size
-        return idx
 
-    cpdef insert(self, key, value):
-        cdef vector[uint32_t] bkey = _key_to_vector(key)
-        cdef vector[uint8_t] bvalue = _value_to_vector(value, self.value_size)
-
-        if self.num_entries / self.size > self.max_load_factor:
-            self._resize(int(self.size * 1.5))
-
-        cdef int idx = self._index(bkey, self.size)
-
-        if self.table[idx].empty():
-            # Initialize the vector at this slot if empty
-            self.table[idx] = vector[pair[vector[uint32_t], vector[uint8_t]]]()
-
-        for i in range(self.table[idx].size()):
-            if self.table[idx][i].first == bkey:
-                self.table[idx][i].second = bvalue  # Update the value if key exists
-                return
-
-        # If key does not exist, add a new pair
-        self.table[idx].push_back(pair[vector[uint32_t], vector[uint8_t]](bkey, bvalue))
-        self.num_entries += 1
-
-    cpdef bytes lookup(self, key):
-        cdef vector[uint32_t] bkey = _key_to_vector(key)
-        cdef int idx = self._index(bkey, self.size)
-
-        if not self.table[idx].empty():
-            for i in range(self.table[idx].size()):
-                if self.table[idx][i].first == bkey:
-                    return _vector_to_value(self.table[idx][i].second)
-
-        raise KeyError(f'Key {key} not found')
-
-    cpdef void remove(self, key):
-        cdef vector[uint32_t] bkey = _key_to_vector(key)
-        cdef int idx = self._index(bkey, self.size)
-
-        if not self.table[idx].empty():
-            for i in range(self.table[idx].size()):
-                if self.table[idx][i].first == bkey:
-                    self.table[idx].erase(self.table[idx].begin() + <int> i)
-                    self.num_entries -= 1
-                    if self.num_entries / self.size < self.min_load_factor:
-                        self._resize(max(1, int(self.size * 0.5)))
-                    return
-
-        raise KeyError(f'Key {key} not found')
-
-    cdef void _resize(self, int new_size):
-        cdef vector[vector[pair[vector[uint32_t], vector[uint8_t]]]] new_table = vector[
-            vector[pair[vector[uint32_t], vector[uint8_t]]]](new_size)
-        cdef int new_idx
-        for bucket in self.table:
-            for kvp in bucket:
-                new_idx = self._index(kvp.first, new_size)
-                if new_table[new_idx].empty():
-                    new_table[new_idx] = vector[pair[vector[uint32_t], vector[uint8_t]]]()
-
-                new_table[new_idx].push_back(kvp)
-
-        self.table = new_table
-        self.size = new_size
-
-    cpdef void save(self, file):
-        cdef object data = {
-            'size': self.size,
-            'value_size': self.value_size,
-            'max_load_factor': self.max_load_factor,
-            'min_load_factor': self.min_load_factor,
-            'num_entries': self.num_entries,
-            'table': [
-                [(_vector_to_key(pair.first), _vector_to_value(pair.second)) for pair in bucket]
-                for bucket in self.table
-            ]
-        }
-        file.write(msgpack.packb(data))
-
-    @staticmethod
-    def load(file) -> 'HashTable':
-        cdef vector[uint32_t] bkey
-        cdef vector[uint8_t] bvalue
-        data = msgpack.unpackb(file.read())
-
-        ht = HashTable(
-            size=data['size'],
-            value_size=data['value_size'],
-            max_load_factor=data['max_load_factor'],
-            min_load_factor=data['min_load_factor']
-        )
-        ht.num_entries = data['num_entries']
-        ht.table = vector[vector[pair[vector[uint32_t], vector[uint8_t]]]](ht.size)
-
-        for bucket_data in data['table']:
-            bucket = vector[pair[vector[uint32_t], vector[uint8_t]]]()
-            for key, value in bucket_data:
-                print(key, value)
-                bkey = _key_to_vector(key)
-                bvalue = _value_to_vector(value, ht.value_size)
-                bucket.push_back(pair[vector[uint32_t], vector[uint8_t]](bkey, bvalue))
-            ht.table.push_back(bucket)
-
-        ht._resize(ht.size)  # important: recompute correct bucket indexes
-        return ht
-
-    def items(self):
-        return HashTableIterator(self)
+    def __del__(self):
+        free(self.table)
+        free(self.keys)
+        free(self.values)
 
     def __len__(self):
-        return self.num_entries
+        return self.used
 
+    cdef int get_index(self, uint8_t* key):
+        """key must be a perfectly random distributed value, so we don't need a hash function here."""
+        cdef uint32_t key32 = (key[0] << 24) | (key[1] << 16) | (key[2] << 8) | key[3]
+        return key32 % self.capacity
 
-cdef class HashTableIterator:
-    cdef HashTable _hashtable
-    cdef int _bucket_index
-    cdef vector[pair[vector[uint32_t], vector[uint8_t]]] _pairs
-    cdef int _pair_index
+    def __setitem__(self, key: bytes, value: bytes):
+        if len(key) != self.ksize or len(value) != self.vsize:
+            raise ValueError("Key or value size does not match the defined sizes")
 
-    def __init__(self, HashTable hashtable):
-        self._hashtable = hashtable
-        self._bucket_index = -1
-        self._pair_index = 0
-        self._advance_bucket()
+        cdef uint8_t* key_ptr = <uint8_t*> key
+        cdef uint8_t* value_ptr = <uint8_t*> value
+        cdef uint32_t kv_index
 
-    def _advance_bucket(self):
-        self._bucket_index += 1
-        while (self._bucket_index < self._hashtable.size and
-               self._hashtable.table[self._bucket_index].empty()):
-            self._bucket_index += 1
+        cdef int index = self.get_index(key_ptr)
+        while self.table[index] not in (FREE_BUCKET, TOMBSTONE_BUCKET):
+            kv_index = self.table[index]
+            if memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
+                memcpy(self.values + kv_index * self.vsize, value_ptr, self.vsize)
+                return
+            index = (index + 1) % self.capacity
 
-        if self._bucket_index < self._hashtable.size:
-            self._pairs = self._hashtable.table[self._bucket_index]
-            self._pair_index = 0
+        if self.kv_used >= self.kv_capacity:
+            self.resize_kv(int(self.kv_capacity * self.kv_grow_factor))
+
+        kv_index = self.kv_used
+        memcpy(self.keys + kv_index * self.ksize, key_ptr, self.ksize)
+        memcpy(self.values + kv_index * self.vsize, value_ptr, self.vsize)
+        self.kv_used += 1
+
+        if self.table[index] == TOMBSTONE_BUCKET:
+            self.tombstones -= 1
+        self.used += 1
+        self.table[index] = kv_index
+
+        if self.used + self.tombstones > self.capacity * self.max_load_factor:
+            self.resize_table(int(self.capacity * self.grow_factor))
+
+    cdef uint32_t _lookup_kv_index(self, uint8_t* key_ptr):
+        cdef int index = self.get_index(key_ptr)
+        cdef int original_index = index
+        cdef uint32_t kv_index
+        while self.table[index] != FREE_BUCKET:
+            kv_index = self.table[index]
+            if self.table[index] != TOMBSTONE_BUCKET and memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
+                return kv_index
+            index = (index + 1) % self.capacity
+            if index == original_index:
+                break
+        return <uint32_t> 0xffffffff  # not found
+
+    def __contains__(self, key: bytes):
+        if len(key) != self.ksize:
+            raise ValueError("Key size does not match the defined size")
+
+        return self._lookup_kv_index(<uint8_t*> key) != <uint32_t> 0xffffffff
+
+    def __getitem__(self, key: bytes):
+        if len(key) != self.ksize:
+            raise ValueError("Key size does not match the defined size")
+
+        cdef uint32_t kv_index = self._lookup_kv_index(<uint8_t*> key)
+        if kv_index == <uint32_t> 0xffffffff:
+            raise KeyError("Key not found")
         else:
-            self._pairs = []
+            return self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
 
-    def __iter__(self):
-        return self
+    def setdefault(self, key: bytes, value: bytes):
+        if not key in self:
+            self[key] = value
+        return self[key]
 
-    def __next__(self):
-        while True:
-            # If we have more pairs in the current bucket
-            if self._pair_index < self._pairs.size():
-                pair = self._pairs[self._pair_index]
-                key = _vector_to_key(pair.first)
-                value = _vector_to_value(pair.second)
-                self._pair_index += 1
-                return key, value
+    def get(self, key: bytes, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
 
-            # Otherwise, move to the next bucket
-            self._advance_bucket()
+    def pop(self, key: bytes, default=_NoDefault):
+        try:
+            value = self[key]
+            del self[key]
+            return value
+        except KeyError:
+            if default != _NoDefault:
+                return default
+            raise
 
-            # If we have gone through all buckets, stop iteration
-            if self._bucket_index >= self._hashtable.size:
-                raise StopIteration
+    def __delitem__(self, key: bytes):
+        if len(key) != self.ksize:
+            raise ValueError("Key size does not match the defined size")
+
+        cdef uint8_t* key_ptr = <uint8_t*> key
+
+        cdef int index = self.get_index(key_ptr)
+        cdef int original_index = index
+        cdef uint32_t kv_index
+
+        while self.table[index] != FREE_BUCKET:
+            kv_index = self.table[index]
+            if kv_index != TOMBSTONE_BUCKET and memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
+                memset(self.keys + kv_index * self.ksize, 0, self.ksize)
+                memset(self.values + kv_index * self.vsize, 0, self.vsize)
+                self.table[index] = TOMBSTONE_BUCKET
+                self.used -= 1
+                self.tombstones += 1
+
+                # Resize down if necessary
+                if self.used < self.capacity * self.min_load_factor:
+                    new_capacity = max(int(self.capacity * self.shrink_factor), MIN_CAPACITY)
+                    self.resize_table(new_capacity)
+                return
+            index = (index + 1) % self.capacity
+            if index == original_index:
+                break
+        raise KeyError("Key not found")
+
+    def iteritems(self):
+        cdef int i
+        cdef uint32_t kv_index
+        for i in range(self.capacity):
+            kv_index = self.table[i]
+            if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
+                key = self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
+                value = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
+                yield key, value
+
+    cdef void resize_table(self, int new_capacity):
+        cdef int i, index
+        cdef uint32_t kv_index
+        cdef uint32_t* new_table = <uint32_t*> malloc(new_capacity * sizeof(uint32_t))
+        for i in range(new_capacity):
+            new_table[i] = FREE_BUCKET
+
+        current_capacity = self.capacity
+        self.capacity = new_capacity
+        for i in range(current_capacity):
+            kv_index = self.table[i]
+            if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
+                index = self.get_index(self.keys + kv_index * self.ksize)
+                while new_table[index] != FREE_BUCKET:
+                    index = (index + 1) % new_capacity
+                new_table[index] = kv_index
+
+        free(self.table)
+        self.table = new_table
+        self.tombstones = 0
+
+    cdef void resize_kv(self, int new_capacity):
+        self.keys = <uint8_t*> realloc(self.keys, new_capacity * self.ksize * sizeof(uint8_t))
+        self.values = <uint8_t*> realloc(self.values, new_capacity * self.vsize * sizeof(uint8_t))
+        self.kv_capacity = new_capacity
+
+    def write(self, file):
+        if isinstance(file, (str, bytes)):
+            with open(file, 'wb') as fd:
+                self._write_fd(fd)
+        else:
+            self._write_fd(file)
+
+    def _write_fd(self, fd):
+        cdef uint32_t kv_index
+        entries = []
+        for i in range(self.capacity):
+            kv_index = self.table[i]
+            if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
+                key_bytes = self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
+                value_bytes = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
+                entries.append((key_bytes, value_bytes))
+        data = {
+            'ksize': self.ksize,
+            'vsize': self.vsize,
+            'capacity': self.capacity,
+            'entries': entries
+        }
+        packed = msgpack.packb(data)
+        fd.write(packed)
+
+    @classmethod
+    def read(cls, file):
+        if isinstance(file, (str, bytes)):
+            with open(file, 'rb') as fd:
+                return cls._read_fd(fd)
+        else:
+            return cls._read_fd(file)
+
+    @classmethod
+    def _read_fd(cls, fd):
+        packed = fd.read()
+        data = msgpack.unpackb(packed, raw=False)
+        ht = cls(key_size=data['ksize'], value_size=data['vsize'], capacity=data['capacity'])
+        for key, value in data['entries']:
+            ht[key] = value
+        return ht

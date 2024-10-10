@@ -1,15 +1,13 @@
 BorgHash
 =========
 
-A hashtable implementation as a Python library.
-
-Implemented in Cython (most code) and a tiny bit of C++.
+A hashtable implementation as a Python library, implemented in Cython.
 
 Keys
 ----
 
-The hashtable keys MUST be perfectly random 256bit values,
-like from a cryptographic hash (sha256, hmac-sha256, ...).
+The hashtable keys MUST be perfectly random bytes, like from a cryptographic
+hash (sha256, hmac-sha256, ...).
 
 The implementation relies on this property and does not implement
 an own hash function, but just takes bits from the given key.
@@ -27,10 +25,12 @@ into these binary bytes, e.g. Python stdlib ``struct`` module.
 BorgHash Operations
 -------------------
 
-- add / remove / lookup
-- iteritems
-- len()
-- save / load
+BorgHash has an API similar to a dict:
+
+- __setitem__ / __getitem__ / __delitem__ / __contains__
+- get(), pop(), setdefault()
+- iteritems() and len()
+- read() / write()
 
 Scalability
 -----------
