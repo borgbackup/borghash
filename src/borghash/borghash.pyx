@@ -34,6 +34,8 @@ cdef class HashTable:
     cdef float kv_grow_factor
     cdef uint8_t* keys
     cdef uint8_t* values
+    cdef int stats_get, stats_set, stats_del, stats_iter, stats_lookup, stats_linear
+    cdef int stats_resize_table, stats_resize_kv
 
     def __init__(self, key_size: int, value_size: int, capacity: int = MIN_CAPACITY,
                  max_load_factor: float = 0.5, min_load_factor: float = 0.10,
@@ -64,6 +66,14 @@ cdef class HashTable:
         self.values = NULL
         self._resize_kv(int(capacity * max_load_factor))
         # ^^^ kv arrays ^^^
+        self.stats_get = 0
+        self.stats_set = 0
+        self.stats_del = 0
+        self.stats_iter = 0  # iteritems calls
+        self.stats_lookup = 0  # _lookup_index calls
+        self.stats_linear = 0  # how many steps the linear search inside _lookup_index needed
+        self.stats_resize_table = 0
+        self.stats_resize_kv = 0
 
     def __del__(self):
         free(self.table)
@@ -86,7 +96,9 @@ cdef class HashTable:
         """
         cdef int index = self._get_index(key_ptr)
         cdef uint32_t kv_index
+        self.stats_lookup += 1
         while (kv_index := self.table[index]) != FREE_BUCKET:
+            self.stats_linear += 1
             if kv_index != TOMBSTONE_BUCKET and memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
                 if index_ptr:
                     index_ptr[0] = index
@@ -104,6 +116,7 @@ cdef class HashTable:
         cdef uint8_t* value_ptr = <uint8_t*> value
         cdef uint32_t kv_index
         cdef int index
+        self.stats_set += 1
         if self._lookup_index(key_ptr, &index):
             kv_index = self.table[index]
             memcpy(self.values + kv_index * self.vsize, value_ptr, self.vsize)
@@ -139,6 +152,7 @@ cdef class HashTable:
             raise ValueError("Key size does not match the defined size")
         cdef uint32_t kv_index
         cdef int index
+        self.stats_get += 1
         if self._lookup_index(<uint8_t*> key, &index):
             kv_index = self.table[index]
             return self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
@@ -152,6 +166,7 @@ cdef class HashTable:
         cdef int index
         cdef uint32_t kv_index
 
+        self.stats_del += 1
         if self._lookup_index(key_ptr, &index):
             kv_index = self.table[index]
             memset(self.keys + kv_index * self.ksize, 0, self.ksize)
@@ -191,6 +206,7 @@ cdef class HashTable:
     def iteritems(self):
         cdef int i
         cdef uint32_t kv_index
+        self.stats_iter += 1
         for i in range(self.capacity):
             kv_index = self.table[i]
             if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
@@ -205,6 +221,7 @@ cdef class HashTable:
         for i in range(new_capacity):
             new_table[i] = FREE_BUCKET
 
+        self.stats_resize_table += 1
         current_capacity = self.capacity
         self.capacity = new_capacity
         for i in range(current_capacity):
@@ -222,9 +239,23 @@ cdef class HashTable:
     cdef void _resize_kv(self, int new_capacity):
         # We must never use kv indexes >= RESERVED, thus we'll never need more capacity either.
         cdef int capacity = min(new_capacity, RESERVED - 1)
+        self.stats_resize_kv += 1
         self.keys = <uint8_t*> realloc(self.keys, capacity * self.ksize * sizeof(uint8_t))
         self.values = <uint8_t*> realloc(self.values, capacity * self.vsize * sizeof(uint8_t))
         self.kv_capacity = capacity
+
+    @property
+    def stats(self):
+        return {
+            "get": self.stats_get,
+            "set": self.stats_set,
+            "del": self.stats_del,
+            "iter": self.stats_iter,
+            "lookup": self.stats_lookup,
+            "linear": self.stats_linear,
+            "resize_table": self.stats_resize_table,
+            "resize_kv": self.stats_resize_kv,
+        }
 
 
 cdef class HashTableNT:

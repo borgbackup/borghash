@@ -103,3 +103,26 @@ def test_ht_stress(ht):
     for key in keys:
         del ht[key]
     assert len(ht) == 0
+
+
+def test_stats(ht):
+    assert ht.stats["get"] == 0
+    assert ht.stats["set"] == 0
+    assert ht.stats["del"] == 0
+    assert ht.stats["iter"] == 0
+    assert ht.stats["lookup"] == 0
+    assert ht.stats["linear"] == 0
+    assert ht.stats["resize_table"] == 0
+    assert ht.stats["resize_table"] == 0
+    assert ht.stats["resize_kv"] == 0
+    ht[key1] = value1
+    assert ht.stats["set"] == 1
+    assert ht.stats["lookup"] == 1
+    ht[key1]
+    assert ht.stats["get"] == 1
+    assert ht.stats["lookup"] == 2
+    del ht[key1]
+    assert ht.stats["del"] == 1
+    assert ht.stats["lookup"] == 3
+    list(ht.iteritems())
+    assert ht.stats["iter"] == 1
