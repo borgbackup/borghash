@@ -104,6 +104,10 @@ def test_ntht_stress(ntht):
     assert len(ntht) == 0
 
 
+def test_stats(ntht):
+    assert isinstance(ntht.stats, dict)
+
+
 def test_read_write(ntht12, tmp_path):
     path = tmp_path / "hashtablent.msgpack"
     with open(path, "wb") as fd:

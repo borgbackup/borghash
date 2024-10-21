@@ -337,6 +337,10 @@ cdef class HashTableNT:
         else:
             return self._to_namedtuple_value(binary_value)
 
+    @property
+    def stats(self):
+        return self.inner.stats
+
     def write(self, file):
         if isinstance(file, (str, bytes)):
             with open(file, 'wb') as fd:
