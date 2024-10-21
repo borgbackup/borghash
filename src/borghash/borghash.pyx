@@ -8,6 +8,8 @@ HashTable: low-level ht mapping fully random bytes keys to bytes values.
 
 HashTableNT: wrapper around HashTable, providing namedtuple values and serialization.
 """
+from typing import Tuple
+
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy, memset, memcmp
 from libc.stdint cimport uint8_t, uint32_t
@@ -244,6 +246,55 @@ cdef class HashTable:
         self.values = <uint8_t*> realloc(self.values, capacity * self.vsize * sizeof(uint8_t))
         self.kv_capacity = capacity
 
+    def k_to_idx(self, key: bytes) -> int:
+        """
+        return the key's index in the keys array (index is stable while in memory).
+        this can be used to "abbreviate" a known key (e.g. 256bit key -> 32bit index).
+        """
+        if len(key) != self.ksize:
+            raise ValueError("Key size does not match the defined size")
+        cdef int index
+        if self._lookup_index(<uint8_t*> key, &index):
+            return self.table[index]  # == uint32_t kv_index
+        else:
+            raise KeyError("Key not found")
+
+    def idx_to_k(self, idx: int) -> bytes:
+        """
+        for a given index, return the key stored at that index in the keys array.
+        this is the reverse of k_to_idx (e.g. 32bit index -> 256bit key).
+        """
+        cdef uint32_t kv_index = <uint32_t> idx
+        return self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
+
+    def kv_to_idx(self, key: bytes, value: bytes) -> int:
+        """
+        return the key's/value's index in the keys/values array (index is stable while in memory).
+        this can be used to "abbreviate" a known key/value pair. (e.g. 256bit key + 32bit value -> 32bit index).
+        """
+        if len(key) != self.ksize:
+            raise ValueError("Key size does not match the defined size")
+        if len(value) != self.vsize:
+            raise ValueError("Value size does not match the defined size")
+        cdef int index
+        cdef uint32_t kv_index
+        if self._lookup_index(<uint8_t*> key, &index):
+            kv_index = self.table[index]
+            value_found = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
+            if value == value_found:
+                return kv_index
+        raise KeyError("Key/Value not found")
+
+    def idx_to_kv(self, idx: int) -> Tuple[bytes, bytes]:
+        """
+        for a given index, return the key/value stored at that index in the keys/values array.
+        this is the reverse of kv_to_idx (e.g. 32bit index -> 256bit key + 32bit value).
+        """
+        cdef uint32_t kv_index = <uint32_t> idx
+        key = self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
+        value = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
+        return key, value
+
     @property
     def stats(self):
         return {
@@ -336,6 +387,20 @@ cdef class HashTableNT:
             return default
         else:
             return self._to_namedtuple_value(binary_value)
+
+    def k_to_idx(self, key: bytes) -> int:
+        return self.inner.k_to_idx(key)
+
+    def idx_to_k(self, idx: int) -> bytes:
+        return self.inner.idx_to_k(idx)
+
+    def kv_to_idx(self, key: bytes, value) -> int:
+        binary_value = self._to_binary_value(value)
+        return self.inner.kv_to_idx(key, binary_value)
+
+    def idx_to_kv(self, idx: int) -> Tuple[bytes, Tuple]:
+        key, binary_value = self.inner.idx_to_kv(idx)
+        return key, self._to_namedtuple_value(binary_value)
 
     @property
     def stats(self):

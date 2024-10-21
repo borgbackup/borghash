@@ -104,6 +104,30 @@ def test_ntht_stress(ntht):
     assert len(ntht) == 0
 
 
+def test_k_to_idx(ntht12):
+    idx1 = ntht12.k_to_idx(key1)
+    idx2 = ntht12.k_to_idx(key2)
+    with pytest.raises(KeyError):
+        ntht12.k_to_idx(key3)
+    assert idx1 != idx2
+    assert ntht12.idx_to_k(idx1) == key1
+    assert ntht12.idx_to_k(idx2) == key2
+
+
+def test_kv_to_idx(ntht12):
+    idx1 = ntht12.kv_to_idx(key1, value1)
+    idx2 = ntht12.kv_to_idx(key2, value2)
+    with pytest.raises(KeyError):
+        ntht12.kv_to_idx(key3, value3)
+    with pytest.raises(KeyError):
+        ntht12.kv_to_idx(key1, value2)
+    with pytest.raises(KeyError):
+        ntht12.kv_to_idx(key2, value1)
+    assert idx1 != idx2
+    assert ntht12.idx_to_kv(idx1) == (key1, value1)
+    assert ntht12.idx_to_kv(idx2) == (key2, value2)
+
+
 def test_stats(ntht):
     assert isinstance(ntht.stats, dict)
 

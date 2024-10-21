@@ -126,3 +126,27 @@ def test_stats(ht):
     assert ht.stats["lookup"] == 3
     list(ht.iteritems())
     assert ht.stats["iter"] == 1
+
+
+def test_k_to_idx(ht12):
+    idx1 = ht12.k_to_idx(key1)
+    idx2 = ht12.k_to_idx(key2)
+    with pytest.raises(KeyError):
+        ht12.k_to_idx(key3)
+    assert idx1 != idx2
+    assert ht12.idx_to_k(idx1) == key1
+    assert ht12.idx_to_k(idx2) == key2
+
+
+def test_kv_to_idx(ht12):
+    idx1 = ht12.kv_to_idx(key1, value1)
+    idx2 = ht12.kv_to_idx(key2, value2)
+    with pytest.raises(KeyError):
+        ht12.kv_to_idx(key3, value3)
+    with pytest.raises(KeyError):
+        ht12.kv_to_idx(key1, value2)
+    with pytest.raises(KeyError):
+        ht12.kv_to_idx(key2, value1)
+    assert idx1 != idx2
+    assert ht12.idx_to_kv(idx1) == (key1, value1)
+    assert ht12.idx_to_kv(idx2) == (key2, value2)
