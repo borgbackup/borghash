@@ -66,10 +66,10 @@ Keys and Values
 
 Keys: ``bytes``, see ``HashTable``.
 
-Values: any fixed type of ``namedtuple`` that can be serialized to bytes by
-Python's ``struct`` module using a given format string. When setting a
-value, it is automatically serialized. When values are returned, they will
-be namedtuples of the given type.
+Values: any fixed type of ``namedtuple`` that can be serialized to ``bytes``
+by Python's ``struct`` module using a given format string. When setting a
+value, it is automatically serialized. When a value are returned, it will be
+a ``namedtuple`` of the given type.
 
 Persistence
 ~~~~~~~~~~~
@@ -80,7 +80,7 @@ format.
 
 When a ``HashTableNT`` is saved to disk, only the non-deleted entries are
 persisted and when it is loaded from disk, a new hashtable and new, dense
-arrays are built for these keys/values. Thus, k/v indexes will be different!
+k/v arrays are built - thus, k/v indexes will be different!
 
 API
 ---
