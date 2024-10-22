@@ -27,13 +27,13 @@ Implementation details
 ~~~~~~~~~~~~~~~~~~~~~~
 
 To have little memory overhead overall, the hashtable only stores uint32_t
-indexes into separate keys and values arrays.
+indexes into separate keys and values arrays (short: kv arrays).
 
 A new key just gets appended to the keys array. The corresponding value gets
 appended to the values array. After that, the key and value do not change their
-index as long as they exist in the hashtable and the ht and k/v arrays are in
-memory. Even when k/v pairs are deleted from HashTable, the k/v arrays never
-shrink and the indexes of other k/v pairs don't change.
+index as long as they exist in the hashtable and the ht and kv arrays are in
+memory. Even when kv pairs are deleted from ``HashTable``, the kv arrays never
+shrink and the indexes of other kv pairs don't change.
 
 This is because we want to have stable array indexes for the keys/values so the
 indexes can be used outside of ``HashTable`` as memory-efficient references.
@@ -41,8 +41,8 @@ indexes can be used outside of ``HashTable`` as memory-efficient references.
 Memory allocated
 ~~~~~~~~~~~~~~~~
 
-For a hashtable load factor of 0.1 - 0.5, a kv array grow factor of 1.3 and N
-key/value pairs, memory usage in bytes is approximately:
+For a hashtable load factor of 0.1 - 0.5, a kv array grow factor of 1.3 and
+N kv pairs, memory usage in bytes is approximately:
 
 - Hashtable: from ``N * 4 / 0.5`` to ``N * 4 / 0.1``
 - Keys: from ``N * len(key) * 1.0`` to ``N * len(key) * 1.3``
@@ -51,15 +51,15 @@ key/value pairs, memory usage in bytes is approximately:
 - Overall maximum: ``N * (40 + len(key + value) * 1.3)``
 - Overall minimum: ``N * (8 + len(key + value))``
 
-When the hashtable or the keys/values arrays are resized, there will be short
-memory usage spikes. For the k/v arrays, ``realloc()`` is used for efficiency
-and to avoid copying of data and memory usage spikes, if possible.
+When the hashtable or the kv arrays are resized, there will be short memory
+usage spikes. For the kv arrays, ``realloc()`` is used to avoid copying of
+data and memory usage spikes, if possible.
 
 HashTableNT
 -----------
 
-A convenience wrapper around HashTable, providing namedtuple values and
-persistence.
+``HashTableNT`` is a convenience wrapper around ``HashTable``, accepting
+and returning ``namedtuple`` values and persistence.
 
 Keys and Values
 ~~~~~~~~~~~~~~~
@@ -67,20 +67,20 @@ Keys and Values
 Keys: ``bytes``, see ``HashTable``.
 
 Values: any fixed type of ``namedtuple`` that can be serialized to ``bytes``
-by Python's ``struct`` module using a given format string. When setting a
-value, it is automatically serialized. When a value are returned, it will be
-a ``namedtuple`` of the given type.
+by Python's ``struct`` module using a given format string.
+
+When setting a value, it is automatically serialized. When a value is returned,
+it will be a ``namedtuple`` of the given type.
 
 Persistence
 ~~~~~~~~~~~
 
-``.write()`` and ``.read()`` methods are provided to save/load the whole
-``HashTableNT`` to/from a file, using ``msggpack`` as an efficient binary
-format.
+``HashTableNT`` has ``.write()`` and ``.read()`` methods to save/load its
+content to/from a file, using ``msggpack`` as an efficient binary format.
 
 When a ``HashTableNT`` is saved to disk, only the non-deleted entries are
 persisted and when it is loaded from disk, a new hashtable and new, dense
-k/v arrays are built - thus, k/v indexes will be different!
+kv arrays are built - thus, kv indexes will be different!
 
 API
 ---
