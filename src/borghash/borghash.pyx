@@ -18,6 +18,7 @@ import struct
 
 import msgpack
 
+MAGIC = b"BORGHASH"
 MIN_CAPACITY = 1000  # never shrink the hash table below this capacity
 
 cdef uint32_t FREE_BUCKET = 0xFFFFFFFF
@@ -414,24 +415,23 @@ cdef class HashTableNT:
             self._write_fd(file)
 
     def _write_fd(self, fd):
-        keys_array = []
-        values_dict = {field: [] for field in self.namedtuple_type._fields}
-        for key, value in self.iteritems():
-            keys_array.append(key)
-            for field, val in zip(self.namedtuple_type._fields, value):
-                values_dict[field].append(val)
-        data = {
+        fd.write(MAGIC)
+        packer = msgpack.Packer()
+        header = {
             'key_size': self.key_size,
             'value_size': self.value_size,
             'value_format': self.value_format,
             'namedtuple_type_name': self.namedtuple_type.__name__,
             'namedtuple_type_fields': self.namedtuple_type._fields,
             'capacity': self.inner.capacity,
-            'keys': keys_array,
-            'values': values_dict,
+            'used': self.inner.used,  # count of keys / values
         }
-        packed = msgpack.packb(data, use_bin_type=True)
-        fd.write(packed)
+        fd.write(packer.pack(header))
+        count = 0
+        for kv_tuple in self.iteritems():
+            fd.write(packer.pack(kv_tuple))
+            count += 1
+        assert count == self.inner.used
 
     @classmethod
     def read(cls, file):
@@ -443,14 +443,28 @@ cdef class HashTableNT:
 
     @classmethod
     def _read_fd(cls, fd):
-        packed = fd.read()
-        data = msgpack.unpackb(packed, raw=False)
-        namedtuple_type = namedtuple(data['namedtuple_type_name'], data['namedtuple_type_fields'])
-        ht = cls(key_size=data['key_size'], value_format=data['value_format'], namedtuple_type=namedtuple_type, capacity=data['capacity'])
-        keys_array = data['keys']
-        values_dict = data['values']
-        for i in range(len(keys_array)):
-            key = keys_array[i]
-            value = namedtuple_type(*(values_dict[field][i] for field in namedtuple_type._fields))
-            ht[key] = value
+        magic = fd.read(len(MAGIC))
+        if magic != MAGIC:
+            raise ValueError(f"Invalid file, magic {MAGIC.decode()} not found.")
+        unpacker = msgpack.Unpacker(fd)
+        header = next(unpacker)
+        namedtuple_type = namedtuple(header['namedtuple_type_name'], header['namedtuple_type_fields'])
+        ht = cls(key_size=header['key_size'], value_format=header['value_format'], namedtuple_type=namedtuple_type, capacity=header['capacity'])
+        count = 0
+        for key, value in unpacker:
+            ht[key] = namedtuple_type(*value)
+            count += 1
+        assert count == header['used']
         return ht
+
+    def size(self):
+        """
+        do a rough worst-case estimate of the on-disk size when using .write().
+
+        as msgpack tries to be efficient (e.g. storing small integers using fewer bytes than for large integers),
+        the overall size is hard to estimate as it will depend on the values' types and values.
+        """
+        one_time_overheads = 4096  # very rough
+        msgpack_overhead = 1.2  # worst case?
+        N = self.inner.used
+        return int(N * (self.key_size + self.value_size) * msgpack_overhead + one_time_overheads)

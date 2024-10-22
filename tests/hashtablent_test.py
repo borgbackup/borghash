@@ -1,4 +1,5 @@
 from collections import namedtuple
+from io import BytesIO
 
 import pytest
 
@@ -142,3 +143,20 @@ def test_read_write(ntht12, tmp_path):
     assert ntht_loaded[key2] == value2
 
 
+@pytest.mark.parametrize("n", [1000, 10000, 100000, 1000000])
+def test_size(ntht, n):
+    # fill the ht
+    for i in range(n):
+        key = H2(i)
+        v = key[0]
+        # use mid-size integers as values (not too small, not too big)
+        value = value_type(v * 123456, v * 234567, v * 345678)
+        ntht[key] = value
+    # estimate size
+    estimated_size = ntht.size()
+    # serialize and determine real size
+    with BytesIO() as f:
+        ntht.write(f)
+        real_size = f.tell()
+    # is our estimation good enough?
+    assert estimated_size * 0.8 < real_size < estimated_size * 1.0
