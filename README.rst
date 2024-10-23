@@ -76,7 +76,7 @@ Persistence
 ~~~~~~~~~~~
 
 ``HashTableNT`` has ``.write()`` and ``.read()`` methods to save/load its
-content to/from a file, using ``msggpack`` as an efficient binary format.
+content to/from a file, using an efficient binary format.
 
 When a ``HashTableNT`` is saved to disk, only the non-deleted entries are
 persisted and when it is loaded from disk, a new hashtable and new, dense

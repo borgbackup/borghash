@@ -13,12 +13,16 @@ from typing import Tuple
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy, memset, memcmp
 from libc.stdint cimport uint8_t, uint32_t
+
 from collections import namedtuple
+import json
 import struct
 
-import msgpack
-
 MAGIC = b"BORGHASH"
+assert len(MAGIC) == 8
+VERSION = 1  # version of the on-disk (serialized) format produced by .write().
+HEADER_FMT = "<8sII"  # magic, version, meta length
+
 MIN_CAPACITY = 1000  # never shrink the hash table below this capacity
 
 cdef uint32_t FREE_BUCKET = 0xFFFFFFFF
@@ -339,6 +343,9 @@ cdef class HashTableNT:
         unpacked_data = struct.unpack(self.value_format, binary_value)
         return self.namedtuple_type(*unpacked_data)
 
+    def _set_raw(self, key: bytes, value: bytes):
+        self.inner[key] = value
+
     def __setitem__(self, key: bytes, value):
         self._check_key(key)
         self.inner[key] = self._to_binary_value(value)
@@ -415,9 +422,7 @@ cdef class HashTableNT:
             self._write_fd(file)
 
     def _write_fd(self, fd):
-        fd.write(MAGIC)
-        packer = msgpack.Packer()
-        header = {
+        meta = {
             'key_size': self.key_size,
             'value_size': self.value_size,
             'value_format': self.value_format,
@@ -426,10 +431,15 @@ cdef class HashTableNT:
             'capacity': self.inner.capacity,
             'used': self.inner.used,  # count of keys / values
         }
-        fd.write(packer.pack(header))
+        meta_bytes = json.dumps(meta).encode("utf-8")
+        meta_size = len(meta_bytes)
+        header_bytes = struct.pack(HEADER_FMT, MAGIC, VERSION, meta_size)
+        fd.write(header_bytes)
+        fd.write(meta_bytes)
         count = 0
-        for kv_tuple in self.iteritems():
-            fd.write(packer.pack(kv_tuple))
+        for key, value in self.inner.iteritems():
+            fd.write(key)
+            fd.write(value)
             count += 1
         assert count == self.inner.used
 
@@ -443,28 +453,35 @@ cdef class HashTableNT:
 
     @classmethod
     def _read_fd(cls, fd):
-        magic = fd.read(len(MAGIC))
+        header_size = struct.calcsize(HEADER_FMT)
+        header_bytes = fd.read(header_size)
+        if len(header_bytes) < header_size:
+            raise ValueError(f"Invalid file, file is too short.")
+        magic, version, meta_size = struct.unpack(HEADER_FMT, header_bytes)
         if magic != MAGIC:
             raise ValueError(f"Invalid file, magic {MAGIC.decode()} not found.")
-        unpacker = msgpack.Unpacker(fd)
-        header = next(unpacker)
-        namedtuple_type = namedtuple(header['namedtuple_type_name'], header['namedtuple_type_fields'])
-        ht = cls(key_size=header['key_size'], value_format=header['value_format'], namedtuple_type=namedtuple_type, capacity=header['capacity'])
+        if version != VERSION:
+            raise ValueError(f"Unsupported file version {version}.")
+        meta_bytes = fd.read(meta_size)
+        if len(meta_bytes) < meta_size:
+            raise ValueError(f"Invalid file, file is too short.")
+        meta = json.loads(meta_bytes.decode("utf-8"))
+        namedtuple_type = namedtuple(meta['namedtuple_type_name'], meta['namedtuple_type_fields'])
+        ht = cls(key_size=meta['key_size'], value_format=meta['value_format'], namedtuple_type=namedtuple_type, capacity=meta['capacity'])
         count = 0
-        for key, value in unpacker:
-            ht[key] = namedtuple_type(*value)
-            count += 1
-        assert count == header['used']
+        ksize, vsize = meta['key_size'], meta['value_size']
+        for i in range(meta['used']):
+            key = fd.read(ksize)
+            value = fd.read(vsize)
+            ht._set_raw(key, value)
         return ht
 
     def size(self):
         """
         do a rough worst-case estimate of the on-disk size when using .write().
 
-        as msgpack tries to be efficient (e.g. storing small integers using fewer bytes than for large integers),
-        the overall size is hard to estimate as it will depend on the values' types and values.
+        the serialized size of the metadata is a bit hard to predict, but we cover that with one_time_overheads.
         """
         one_time_overheads = 4096  # very rough
-        msgpack_overhead = 1.2  # worst case?
         N = self.inner.used
-        return int(N * (self.key_size + self.value_size) * msgpack_overhead + one_time_overheads)
+        return int(N * (self.key_size + self.value_size) + one_time_overheads)
