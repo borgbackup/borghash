@@ -33,17 +33,6 @@ cdef uint32_t RESERVED = 0xFFFFFF00  # all >= this is reserved
 _NoDefault = object()
 
 cdef class HashTable:
-    cdef int ksize, vsize
-    cdef int capacity, used, tombstones
-    cdef float max_load_factor, min_load_factor, shrink_factor, grow_factor
-    cdef uint32_t* table
-    cdef int kv_capacity, kv_used
-    cdef float kv_grow_factor
-    cdef uint8_t* keys
-    cdef uint8_t* values
-    cdef int stats_get, stats_set, stats_del, stats_iter, stats_lookup, stats_linear
-    cdef int stats_resize_table, stats_resize_kv
-
     def __init__(self, key_size: int, value_size: int, capacity: int = MIN_CAPACITY,
                  max_load_factor: float = 0.5, min_load_factor: float = 0.10,
                  shrink_factor: float = 0.4, grow_factor: float = 2.0,
@@ -95,7 +84,7 @@ cdef class HashTable:
         cdef uint32_t key32 = (key[0] << 24) | (key[1] << 16) | (key[2] << 8) | key[3]
         return key32 % self.capacity
 
-    cdef int _lookup_index(self, uint8_t* key_ptr, int* index_ptr = NULL):
+    cdef int _lookup_index(self, uint8_t* key_ptr, int* index_ptr):
         """
         search for a specific key.
         if found, return 1 and set *index_ptr to the index of the bucket in self.table.
@@ -152,7 +141,7 @@ cdef class HashTable:
     def __contains__(self, key: bytes):
         if len(key) != self.ksize:
             raise ValueError("Key size does not match the defined size")
-        return bool(self._lookup_index(<uint8_t*> key))
+        return bool(self._lookup_index(<uint8_t*> key, NULL))
 
     def __getitem__(self, key: bytes):
         if len(key) != self.ksize:
@@ -315,12 +304,6 @@ cdef class HashTable:
 
 
 cdef class HashTableNT:
-    cdef int key_size
-    cdef str value_format
-    cdef object namedtuple_type
-    cdef HashTable inner
-    cdef int value_size
-
     def __cinit__(self, int key_size, str value_format, object namedtuple_type, int capacity = MIN_CAPACITY):
         self.key_size = key_size
         self.value_format = value_format
