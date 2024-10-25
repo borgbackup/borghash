@@ -49,18 +49,19 @@ cdef class HashTable:
         self.min_load_factor = min_load_factor
         self.shrink_factor = shrink_factor
         self.grow_factor = grow_factor
+        self.initial_capacity = capacity
         self.capacity = 0
         self.used = 0
         self.tombstones = 0
         self.table = NULL
-        self._resize_table(capacity)
+        self._resize_table(self.initial_capacity)
         # ^^^ hash table ^^^
         # vvv kv arrays vvv
         self.kv_grow_factor = kv_grow_factor
         self.kv_used = 0
         self.keys = NULL
         self.values = NULL
-        self._resize_kv(int(capacity * max_load_factor))
+        self._resize_kv(int(self.initial_capacity * self.max_load_factor))
         # ^^^ kv arrays ^^^
         self.stats_get = 0
         self.stats_set = 0
@@ -75,6 +76,14 @@ cdef class HashTable:
         free(self.table)
         free(self.keys)
         free(self.values)
+
+    def clear(self):
+        """empty HashTable, start from scratch"""
+        self.capacity = 0
+        self.used = 0
+        self._resize_table(self.initial_capacity)
+        self.kv_used = 0
+        self._resize_kv(int(self.initial_capacity * self.max_load_factor))
 
     def __len__(self):
         return self.used
@@ -310,6 +319,9 @@ cdef class HashTableNT:
         self.value_size = struct.calcsize(self.value_format)
         self.namedtuple_type = namedtuple_type
         self.inner = HashTable(self.key_size, self.value_size, capacity=capacity)
+
+    def clear(self):
+        self.inner.clear()
 
     def _check_key(self, key):
         if not isinstance(key, bytes):
