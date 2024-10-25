@@ -304,7 +304,7 @@ cdef class HashTable:
 
 
 cdef class HashTableNT:
-    def __cinit__(self, int key_size, str value_format, object namedtuple_type, int capacity = MIN_CAPACITY):
+    def __init__(self, int key_size, str value_format, object namedtuple_type, int capacity = MIN_CAPACITY):
         self.key_size = key_size
         self.value_format = value_format
         self.value_size = struct.calcsize(self.value_format)
@@ -318,8 +318,8 @@ cdef class HashTableNT:
             raise ValueError(f"Key must be {self.key_size} bytes long")
 
     def _to_binary_value(self, value):
-        if not isinstance(value, self.namedtuple_type):
-            raise TypeError(f"Expected an instance of {self.namedtuple_type}, got {type(value)}")
+        #if not isinstance(value, self.namedtuple_type):
+        #    raise TypeError(f"Expected an instance of {self.namedtuple_type}, got {type(value)}")
         return struct.pack(self.value_format, *value)
 
     def _to_namedtuple_value(self, binary_value):
@@ -328,6 +328,9 @@ cdef class HashTableNT:
 
     def _set_raw(self, key: bytes, value: bytes):
         self.inner[key] = value
+
+    def _get_raw(self, key: bytes):
+        return self.inner[key]
 
     def __setitem__(self, key: bytes, value):
         self._check_key(key)
