@@ -85,6 +85,16 @@ def test_pop(ht12):
     assert ht12.pop(key3, None) is None
 
 
+def test_clear(ht12):
+    ht12.clear()
+    assert len(ht12) == 0
+    assert len(list(ht12.iteritems())) == 0
+    with pytest.raises(KeyError):
+        ht12[key1]
+    with pytest.raises(KeyError):
+        ht12[key2]
+
+
 def test_ht_stress(ht):
     # this also triggers some hashtable resizing
     keys = set()
