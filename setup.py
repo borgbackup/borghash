@@ -1,4 +1,7 @@
 from setuptools import setup
 from Cython.Build import cythonize
 
-setup(ext_modules=cythonize("src/borghash/borghash.pyx"))
+setup(
+    package_data=dict(borghash=["borghash.pxd"]),
+    ext_modules=cythonize("borghash.pyx")
+)
