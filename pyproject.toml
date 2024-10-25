@@ -37,9 +37,6 @@ borghash-demo = "borghash.demo:main"
 # We want to install all the files in the package directories...
 include-package-data = true
 
-# [tool.setuptools.packages.find]
-# where = ["src"]
-
 [tool.setuptools.exclude-package-data]
 # ...except the source files which have been compiled (C extensions):
 "*" = ["*.c", "*.h", "*.pyx"]
