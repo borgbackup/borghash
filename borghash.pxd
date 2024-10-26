@@ -21,6 +21,6 @@ cdef class HashTable:
 cdef class HashTableNT:
     cdef int key_size
     cdef str value_format
-    cdef object namedtuple_type
-    cdef HashTable inner
+    cdef object value_type
     cdef int value_size
+    cdef HashTable inner

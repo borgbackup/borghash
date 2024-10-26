@@ -18,7 +18,7 @@ key3, value3 = b"c" * 32, value_type(31, 32, 33)
 
 @pytest.fixture
 def ntht():
-    return HashTableNT(key_size, value_format, value_type)
+    return HashTableNT(key_size=key_size, value_format=value_format, value_type=value_type)
 
 
 @pytest.fixture
@@ -26,6 +26,15 @@ def ntht12(ntht):
     ntht[key1] = value1
     ntht[key2] = value2
     return ntht
+
+
+def test_init():
+    ht = HashTableNT(key_size=32, value_format=value_format, value_type=value_type)
+    assert len(ht) == 0
+    items = [(key1, value1), (key2, value2)]
+    ht = HashTableNT(items, key_size=32, value_format=value_format, value_type=value_type)
+    assert ht[key1] == value1
+    assert ht[key2] == value2
 
 
 def test_insert_lookup(ntht12):
@@ -46,7 +55,7 @@ def test_remove_lookup(ntht12):
 
 
 def test_items(ntht12):
-    items = set(ntht12.iteritems())
+    items = set(ntht12.items())
     assert (key1, value1) in items
     assert (key2, value2) in items
 
@@ -92,7 +101,7 @@ def test_ntht_stress(ntht):
         ntht[key] = value
         keys.add(key)
     found_keys = set()
-    for key, value in ntht.iteritems():
+    for key, value in ntht.items():
         found_keys.add(key)
         v = key[0]
         assert value == value_type(v, v*2, v*3)

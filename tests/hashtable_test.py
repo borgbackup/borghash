@@ -33,6 +33,20 @@ def ht12(ht):
     return ht
 
 
+def test_init():
+    ht = HashTable(key_size=32, value_size=4)
+    assert len(ht) == 0
+    items = [(key1, value1), (key2, value2)]
+    ht = HashTable(items, key_size=32, value_size=4)
+    assert ht[key1] == value1
+    assert ht[key2] == value2
+    items = dict(items)
+    ht = HashTable(items, key_size=32, value_size=4)
+    assert ht[key1] == value1
+    assert ht[key2] == value2
+
+
+
 def test_insert_lookup(ht12):
     assert ht12[key1] == value1
     assert ht12[key2] == value2
@@ -49,7 +63,7 @@ def test_remove_lookup(ht12):
 
 
 def test_items(ht12):
-    items = set(ht12.iteritems())
+    items = set(ht12.items())
     assert (key1, value1) in items
     assert (key2, value2) in items
 
@@ -88,7 +102,7 @@ def test_pop(ht12):
 def test_clear(ht12):
     ht12.clear()
     assert len(ht12) == 0
-    assert len(list(ht12.iteritems())) == 0
+    assert len(list(ht12.items())) == 0
     with pytest.raises(KeyError):
         ht12[key1]
     with pytest.raises(KeyError):
@@ -104,7 +118,7 @@ def test_ht_stress(ht):
         ht[key] = value
         keys.add(key)
     found_keys = set()
-    for key, value in ht.iteritems():
+    for key, value in ht.items():
         found_keys.add(key)
         assert value == key[:4]
     assert keys == found_keys
@@ -134,7 +148,7 @@ def test_stats(ht):
     del ht[key1]
     assert ht.stats["del"] == 1
     assert ht.stats["lookup"] == 3
-    list(ht.iteritems())
+    list(ht.items())
     assert ht.stats["iter"] == 1
 
 
