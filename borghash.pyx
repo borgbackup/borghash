@@ -8,11 +8,13 @@ HashTable: low-level ht mapping fully random bytes keys to bytes values.
 
 HashTableNT: wrapper around HashTable, providing namedtuple values and serialization.
 """
+from __future__ import annotations
+from typing import BinaryIO, Iterator, Any
+
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy, memset, memcmp
 from libc.stdint cimport uint8_t, uint32_t
 
-from typing import Tuple
 from collections import namedtuple
 from collections.abc import Mapping
 import json
@@ -32,7 +34,7 @@ cdef uint32_t RESERVED = 0xFFFFFF00  # all >= this is reserved
 
 _NoDefault = object()
 
-def _fill(this, other):
+def _fill(this: Any, other: Any) -> None:
     if other is None:
         return
     if isinstance(other, Mapping):
@@ -51,7 +53,7 @@ cdef class HashTable:
                  key_size: int = 0, value_size: int = 0, capacity: int = MIN_CAPACITY,
                  max_load_factor: float = 0.5, min_load_factor: float = 0.10,
                  shrink_factor: float = 0.4, grow_factor: float = 2.0,
-                 kv_grow_factor: float = 1.3):
+                 kv_grow_factor: float = 1.3) -> None:
         # the load of the ht (.table) shall be between 0.25 and 0.5, so it is fast and has few collisions.
         # it is cheap to have a low hash table load, because .table only stores uint32_t indexes into the
         # .keys and .values array.
@@ -92,12 +94,12 @@ cdef class HashTable:
         self.stats_resize_kv = 0
         _fill(self, items)
 
-    def __del__(self):
+    def __del__(self) -> None:
         free(self.table)
         free(self.keys)
         free(self.values)
 
-    def clear(self):
+    def clear(self) -> None:
         """empty HashTable, start from scratch"""
         self.capacity = 0
         self.used = 0
@@ -105,7 +107,7 @@ cdef class HashTable:
         self.kv_used = 0
         self._resize_kv(int(self.initial_capacity * self.max_load_factor))
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.used
 
     cdef int _get_index(self, uint8_t* key):
@@ -133,7 +135,7 @@ cdef class HashTable:
             index_ptr[0] = index
         return 0  # not found
 
-    def __setitem__(self, key: bytes, value: bytes):
+    def __setitem__(self, key: bytes, value: bytes) -> None:
         if len(key) != self.ksize or len(value) != self.vsize:
             raise ValueError("Key or value size does not match the defined sizes")
 
@@ -167,12 +169,12 @@ cdef class HashTable:
         if self.used + self.tombstones > self.capacity * self.max_load_factor:
             self._resize_table(int(self.capacity * self.grow_factor))
 
-    def __contains__(self, key: bytes):
+    def __contains__(self, key: bytes) -> bool:
         if len(key) != self.ksize:
             raise ValueError("Key size does not match the defined size")
         return bool(self._lookup_index(<uint8_t*> key, NULL))
 
-    def __getitem__(self, key: bytes):
+    def __getitem__(self, key: bytes) -> bytes:
         if len(key) != self.ksize:
             raise ValueError("Key size does not match the defined size")
         cdef uint32_t kv_index
@@ -184,7 +186,7 @@ cdef class HashTable:
         else:
             raise KeyError("Key not found")
 
-    def __delitem__(self, key: bytes):
+    def __delitem__(self, key: bytes) -> None:
         if len(key) != self.ksize:
             raise ValueError("Key size does not match the defined size")
         cdef uint8_t* key_ptr = <uint8_t*> key
@@ -207,18 +209,18 @@ cdef class HashTable:
         else:
             raise KeyError("Key not found")
 
-    def setdefault(self, key: bytes, value: bytes):
+    def setdefault(self, key: bytes, value: bytes) -> bytes:
         if not key in self:
             self[key] = value
         return self[key]
 
-    def get(self, key: bytes, default=None):
+    def get(self, key: bytes, default: Any = None) -> bytes|Any:
         try:
             return self[key]
         except KeyError:
             return default
 
-    def pop(self, key: bytes, default=_NoDefault):
+    def pop(self, key: bytes, default: Any = _NoDefault) -> bytes|Any:
         try:
             value = self[key]
             del self[key]
@@ -228,7 +230,7 @@ cdef class HashTable:
                 raise
             return default
 
-    def items(self):
+    def items(self) -> Iterator[tuple[bytes, bytes]]:
         cdef int i
         cdef uint32_t kv_index
         self.stats_iter += 1
@@ -308,7 +310,7 @@ cdef class HashTable:
                 return kv_index
         raise KeyError("Key/Value not found")
 
-    def idx_to_kv(self, idx: int) -> Tuple[bytes, bytes]:
+    def idx_to_kv(self, idx: int) -> tuple[bytes, bytes]:
         """
         for a given index, return the key/value stored at that index in the keys/values array.
         this is the reverse of kv_to_idx (e.g. 32bit index -> 256bit key + 32bit value).
@@ -319,7 +321,7 @@ cdef class HashTable:
         return key, value
 
     @property
-    def stats(self):
+    def stats(self) -> dict[str, int]:
         return {
             "get": self.stats_get,
             "set": self.stats_set,
@@ -334,8 +336,8 @@ cdef class HashTable:
 
 cdef class HashTableNT:
     def __init__(self, items=None, *,
-                 key_size: int = 0, value_format: str = "", value_type: object = None,
-                 capacity: int = MIN_CAPACITY):
+                 key_size: int = 0, value_format: str = "", value_type: Any = None,
+                 capacity: int = MIN_CAPACITY) -> None:
         if not key_size:
             raise ValueError("key_size must be specified and must be > 0.")
         if not value_format:
@@ -349,55 +351,55 @@ cdef class HashTableNT:
         self.inner = HashTable(key_size=self.key_size, value_size=self.value_size, capacity=capacity)
         _fill(self, items)
 
-    def clear(self):
+    def clear(self) -> None:
         self.inner.clear()
 
-    def _check_key(self, key):
+    def _check_key(self, key: bytes) -> None:
         if not isinstance(key, bytes):
             raise TypeError(f"Expected an instance of bytes, got {type(key)}")
         if len(key) != self.key_size:
             raise ValueError(f"Key must be {self.key_size} bytes long")
 
-    def _to_binary_value(self, value):
+    def _to_binary_value(self, value: Any) -> bytes:
         #if not isinstance(value, self.value_type):
         #    raise TypeError(f"Expected an instance of {self.value_type}, got {type(value)}")
         return struct.pack(self.value_format, *value)
 
-    def _to_namedtuple_value(self, binary_value):
+    def _to_namedtuple_value(self, binary_value: bytes) -> Any:
         unpacked_data = struct.unpack(self.value_format, binary_value)
         return self.value_type(*unpacked_data)
 
-    def _set_raw(self, key: bytes, value: bytes):
+    def _set_raw(self, key: bytes, value: bytes) -> None:
         self.inner[key] = value
 
-    def _get_raw(self, key: bytes):
+    def _get_raw(self, key: bytes) -> bytes:
         return self.inner[key]
 
-    def __setitem__(self, key: bytes, value):
+    def __setitem__(self, key: bytes, value: Any) -> None:
         self._check_key(key)
         self.inner[key] = self._to_binary_value(value)
 
-    def __getitem__(self, key: bytes):
+    def __getitem__(self, key: bytes) -> Any:
         self._check_key(key)
         binary_value = self.inner[key]
         return self._to_namedtuple_value(binary_value)
 
-    def __delitem__(self, key: bytes):
+    def __delitem__(self, key: bytes) -> None:
         self._check_key(key)
         del self.inner[key]
 
-    def __contains__(self, key: bytes):
+    def __contains__(self, key: bytes) -> bool:
         self._check_key(key)
         return key in self.inner
 
-    def items(self):
+    def items(self) -> Iterator[tuple[bytes, Any]]:
         for key, binary_value in self.inner.items():
             yield (key, self._to_namedtuple_value(binary_value))
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.inner)
 
-    def get(self, key: bytes, default=None):
+    def get(self, key: bytes, default: Any = None) -> Any:
         self._check_key(key)
         try:
             binary_value = self.inner[key]
@@ -406,13 +408,13 @@ cdef class HashTableNT:
         else:
             return self._to_namedtuple_value(binary_value)
 
-    def setdefault(self, key: bytes, default):
+    def setdefault(self, key: bytes, default: Any) -> Any:
         self._check_key(key)
         binary_default = self._to_binary_value(default)
         binary_value = self.inner.setdefault(key, binary_default)
         return self._to_namedtuple_value(binary_value)
 
-    def pop(self, key: bytes, default=_NoDefault):
+    def pop(self, key: bytes, default: Any = _NoDefault) -> Any:
         self._check_key(key)
         try:
             binary_value = self.inner.pop(key)
@@ -429,26 +431,26 @@ cdef class HashTableNT:
     def idx_to_k(self, idx: int) -> bytes:
         return self.inner.idx_to_k(idx)
 
-    def kv_to_idx(self, key: bytes, value) -> int:
+    def kv_to_idx(self, key: bytes, value: Any) -> int:
         binary_value = self._to_binary_value(value)
         return self.inner.kv_to_idx(key, binary_value)
 
-    def idx_to_kv(self, idx: int) -> Tuple[bytes, Tuple]:
+    def idx_to_kv(self, idx: int) -> tuple[bytes, Any]:
         key, binary_value = self.inner.idx_to_kv(idx)
         return key, self._to_namedtuple_value(binary_value)
 
     @property
-    def stats(self):
+    def stats(self) -> dict[str, int]:
         return self.inner.stats
 
-    def write(self, file):
+    def write(self, file: BinaryIO|str|bytes):
         if isinstance(file, (str, bytes)):
             with open(file, 'wb') as fd:
                 self._write_fd(fd)
         else:
             self._write_fd(file)
 
-    def _write_fd(self, fd):
+    def _write_fd(self, fd: BinaryIO):
         meta = {
             'key_size': self.key_size,
             'value_size': self.value_size,
@@ -471,7 +473,7 @@ cdef class HashTableNT:
         assert count == self.inner.used
 
     @classmethod
-    def read(cls, file):
+    def read(cls, file: BinaryIO|str|bytes):
         if isinstance(file, (str, bytes)):
             with open(file, 'rb') as fd:
                 return cls._read_fd(fd)
@@ -479,7 +481,7 @@ cdef class HashTableNT:
             return cls._read_fd(file)
 
     @classmethod
-    def _read_fd(cls, fd):
+    def _read_fd(cls, fd: BinaryIO):
         header_size = struct.calcsize(HEADER_FMT)
         header_bytes = fd.read(header_size)
         if len(header_bytes) < header_size:
@@ -503,7 +505,7 @@ cdef class HashTableNT:
             ht._set_raw(key, value)
         return ht
 
-    def size(self):
+    def size(self) -> int:
         """
         do a rough worst-case estimate of the on-disk size when using .write().
 
