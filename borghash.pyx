@@ -361,8 +361,11 @@ cdef class HashTableNT:
             raise ValueError(f"Key must be {self.key_size} bytes long")
 
     def _to_binary_value(self, value: Any) -> bytes:
-        #if not isinstance(value, self.value_type):
-        #    raise TypeError(f"Expected an instance of {self.value_type}, got {type(value)}")
+        if not isinstance(value, self.value_type):
+            if isinstance(value, tuple):
+                value = self.value_type(*value)
+            else:
+                raise TypeError(f"Expected an instance of {self.value_type}, got {type(value)}")
         return struct.pack(self.value_format, *value)
 
     def _to_namedtuple_value(self, binary_value: bytes) -> Any:
