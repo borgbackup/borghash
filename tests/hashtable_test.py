@@ -40,6 +40,10 @@ def test_init():
     ht = HashTable(items, key_size=32, value_size=4)
     assert ht[key1] == value1
     assert ht[key2] == value2
+    items = dict(items)
+    ht = HashTable(items, key_size=32, value_size=4)
+    assert ht[key1] == value1
+    assert ht[key2] == value2
 
 
 

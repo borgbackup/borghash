@@ -8,13 +8,13 @@ HashTable: low-level ht mapping fully random bytes keys to bytes values.
 
 HashTableNT: wrapper around HashTable, providing namedtuple values and serialization.
 """
-from typing import Tuple
-
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy, memset, memcmp
 from libc.stdint cimport uint8_t, uint32_t
 
+from typing import Tuple
 from collections import namedtuple
+from collections.abc import Mapping
 import json
 import struct
 
@@ -31,6 +31,20 @@ cdef uint32_t TOMBSTONE_BUCKET = 0xFFFFFFFE
 cdef uint32_t RESERVED = 0xFFFFFF00  # all >= this is reserved
 
 _NoDefault = object()
+
+def _fill(this, other):
+    if other is None:
+        return
+    if isinstance(other, Mapping):
+        for key in other:
+            this[key] = other[key]
+    elif hasattr(other, "keys"):
+        for key in other.keys():
+            this[key] = other[key]
+    else:
+        for key, value in other:
+            this[key] = value
+
 
 cdef class HashTable:
     def __init__(self, items=None, *,
@@ -76,10 +90,7 @@ cdef class HashTable:
         self.stats_linear = 0  # how many steps the linear search inside _lookup_index needed
         self.stats_resize_table = 0
         self.stats_resize_kv = 0
-        # initialize?
-        if items is not None:
-            for key, value in items:
-                self[key] = value
+        _fill(self, items)
 
     def __del__(self):
         free(self.table)
@@ -336,9 +347,7 @@ cdef class HashTableNT:
         self.value_size = struct.calcsize(self.value_format)
         self.value_type = value_type
         self.inner = HashTable(key_size=self.key_size, value_size=self.value_size, capacity=capacity)
-        if items is not None:
-            for key, value in items:
-                self[key] = value
+        _fill(self, items)
 
     def clear(self):
         self.inner.clear()
