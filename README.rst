@@ -58,8 +58,10 @@ data and memory usage spikes, if possible.
 HashTableNT
 -----------
 
-``HashTableNT`` is a convenience wrapper around ``HashTable``, accepting
-and returning ``namedtuple`` values and persistence.
+``HashTableNT`` is a convenience wrapper around ``HashTable`` providing:
+
+- accepts and returns ``namedtuple`` values
+- persistence: can read (write) the hashtable from (to) a file.
 
 Keys and Values
 ~~~~~~~~~~~~~~~
@@ -89,7 +91,7 @@ HashTable / HashTableNT have an API similar to a dict:
 
 - ``__setitem__`` / ``__getitem__`` / ``__delitem__`` / ``__contains__``
 - ``get()``, ``pop()``, ``setdefault()``
-- ``iteritems()``, ``len()``
+- ``items()``, ``len()``
 - ``read()``, ``write()``, ``size()``
 
 Want a demo?
