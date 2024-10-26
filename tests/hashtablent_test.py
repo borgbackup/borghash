@@ -18,7 +18,7 @@ key3, value3 = b"c" * 32, value_type(31, 32, 33)
 
 @pytest.fixture
 def ntht():
-    return HashTableNT(key_size=key_size, value_format=value_format, namedtuple_type=value_type)
+    return HashTableNT(key_size=key_size, value_format=value_format, value_type=value_type)
 
 
 @pytest.fixture
@@ -29,10 +29,10 @@ def ntht12(ntht):
 
 
 def test_init():
-    ht = HashTableNT(key_size=32, value_format=value_format, namedtuple_type=value_type)
+    ht = HashTableNT(key_size=32, value_format=value_format, value_type=value_type)
     assert len(ht) == 0
     items = [(key1, value1), (key2, value2)]
-    ht = HashTableNT(items, key_size=32, value_format=value_format, namedtuple_type=value_type)
+    ht = HashTableNT(items, key_size=32, value_format=value_format, value_type=value_type)
     assert ht[key1] == value1
     assert ht[key2] == value2
 

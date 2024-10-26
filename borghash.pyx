@@ -323,18 +323,18 @@ cdef class HashTable:
 
 cdef class HashTableNT:
     def __init__(self, items=None, *,
-                 key_size: int = 0, value_format: str = "", namedtuple_type: object = None,
+                 key_size: int = 0, value_format: str = "", value_type: object = None,
                  capacity: int = MIN_CAPACITY):
         if not key_size:
             raise ValueError("key_size must be specified and must be > 0.")
         if not value_format:
             raise ValueError("value_format must be specified and must be non-empty.")
-        if namedtuple_type is None:
-            raise ValueError("namedtuple_type must be specified.")
+        if value_type is None:
+            raise ValueError("value_type must be specified (a namedtuple type corresponding to value_format).")
         self.key_size = key_size
         self.value_format = value_format
         self.value_size = struct.calcsize(self.value_format)
-        self.namedtuple_type = namedtuple_type
+        self.value_type = value_type
         self.inner = HashTable(key_size=self.key_size, value_size=self.value_size, capacity=capacity)
         if items is not None:
             for key, value in items:
@@ -350,13 +350,13 @@ cdef class HashTableNT:
             raise ValueError(f"Key must be {self.key_size} bytes long")
 
     def _to_binary_value(self, value):
-        #if not isinstance(value, self.namedtuple_type):
-        #    raise TypeError(f"Expected an instance of {self.namedtuple_type}, got {type(value)}")
+        #if not isinstance(value, self.value_type):
+        #    raise TypeError(f"Expected an instance of {self.value_type}, got {type(value)}")
         return struct.pack(self.value_format, *value)
 
     def _to_namedtuple_value(self, binary_value):
         unpacked_data = struct.unpack(self.value_format, binary_value)
-        return self.namedtuple_type(*unpacked_data)
+        return self.value_type(*unpacked_data)
 
     def _set_raw(self, key: bytes, value: bytes):
         self.inner[key] = value
@@ -444,8 +444,8 @@ cdef class HashTableNT:
             'key_size': self.key_size,
             'value_size': self.value_size,
             'value_format': self.value_format,
-            'namedtuple_type_name': self.namedtuple_type.__name__,
-            'namedtuple_type_fields': self.namedtuple_type._fields,
+            'value_type_name': self.value_type.__name__,
+            'value_type_fields': self.value_type._fields,
             'capacity': self.inner.capacity,
             'used': self.inner.used,  # count of keys / values
         }
@@ -484,8 +484,8 @@ cdef class HashTableNT:
         if len(meta_bytes) < meta_size:
             raise ValueError(f"Invalid file, file is too short.")
         meta = json.loads(meta_bytes.decode("utf-8"))
-        namedtuple_type = namedtuple(meta['namedtuple_type_name'], meta['namedtuple_type_fields'])
-        ht = cls(key_size=meta['key_size'], value_format=meta['value_format'], namedtuple_type=namedtuple_type, capacity=meta['capacity'])
+        value_type = namedtuple(meta['value_type_name'], meta['value_type_fields'])
+        ht = cls(key_size=meta['key_size'], value_format=meta['value_format'], value_type=value_type, capacity=meta['capacity'])
         count = 0
         ksize, vsize = meta['key_size'], meta['value_size']
         for i in range(meta['used']):
