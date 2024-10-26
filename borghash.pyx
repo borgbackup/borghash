@@ -2,7 +2,7 @@
 borghash - hashtable implementations in cython.
 
 HashTable: low-level ht mapping fully random bytes keys to bytes values.
-           key and values length can be chosen, but is fixed afterwards.
+           key and value length can be chosen, but is fixed afterwards.
            the keys and values are stored in arrays separate from the hashtable.
            the hashtable only stores the 32bit indexes into the key/value arrays.
 
@@ -35,6 +35,7 @@ cdef uint32_t RESERVED = 0xFFFFFF00  # all >= this is reserved
 _NoDefault = object()
 
 def _fill(this: Any, other: Any) -> None:
+    """fill this mapping from other"""
     if other is None:
         return
     if isinstance(other, Mapping):
@@ -84,6 +85,7 @@ cdef class HashTable:
         self.values = NULL
         self._resize_kv(int(self.initial_capacity * self.max_load_factor))
         # ^^^ kv arrays ^^^
+        # vvv stats vvv
         self.stats_get = 0
         self.stats_set = 0
         self.stats_del = 0
@@ -92,6 +94,7 @@ cdef class HashTable:
         self.stats_linear = 0  # how many steps the linear search inside _lookup_index needed
         self.stats_resize_table = 0
         self.stats_resize_kv = 0
+        # ^^^ stats ^^^
         _fill(self, items)
 
     def __del__(self) -> None:
@@ -111,7 +114,7 @@ cdef class HashTable:
         return self.used
 
     cdef int _get_index(self, uint8_t* key):
-        """key must be a perfectly random distributed value, so we don't need a hash function here."""
+        """key must be perfectly random distributed bytes, so we don't need a hash function here."""
         cdef uint32_t key32 = (key[0] << 24) | (key[1] << 16) | (key[2] << 8) | key[3]
         return key32 % self.capacity
 
@@ -163,8 +166,7 @@ cdef class HashTable:
         self.kv_used += 1
 
         self.used += 1
-        # _lookup_index set index to a free bucket
-        self.table[index] = kv_index
+        self.table[index] = kv_index  # _lookup_index has set index to a free bucket
 
         if self.used + self.tombstones > self.capacity * self.max_load_factor:
             self._resize_table(int(self.capacity * self.grow_factor))
@@ -223,12 +225,13 @@ cdef class HashTable:
     def pop(self, key: bytes, default: Any = _NoDefault) -> bytes|Any:
         try:
             value = self[key]
-            del self[key]
-            return value
         except KeyError:
             if default is _NoDefault:
                 raise
             return default
+        else:
+            del self[key]
+            return value
 
     def items(self) -> Iterator[tuple[bytes, bytes]]:
         cdef int i
