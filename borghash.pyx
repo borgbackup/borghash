@@ -33,7 +33,8 @@ cdef uint32_t RESERVED = 0xFFFFFF00  # all >= this is reserved
 _NoDefault = object()
 
 cdef class HashTable:
-    def __init__(self, key_size: int, value_size: int, capacity: int = MIN_CAPACITY,
+    def __init__(self, items=None, *,
+                 key_size: int = 0, value_size: int = 0, capacity: int = MIN_CAPACITY,
                  max_load_factor: float = 0.5, min_load_factor: float = 0.10,
                  shrink_factor: float = 0.4, grow_factor: float = 2.0,
                  kv_grow_factor: float = 1.3):
@@ -42,6 +43,10 @@ cdef class HashTable:
         # .keys and .values array.
         # the keys/values arrays have bigger elements and are not hash tables, thus collisions and load
         # factor are no concern there. the kv_grow_factor can be relatively small.
+        if not key_size:
+            raise ValueError("key_size must be specified and must be > 0.")
+        if not value_size:
+            raise ValueError("value_size must be specified and must be > 0.")
         self.ksize = key_size
         self.vsize = value_size
         # vvv hash table vvv
@@ -66,11 +71,15 @@ cdef class HashTable:
         self.stats_get = 0
         self.stats_set = 0
         self.stats_del = 0
-        self.stats_iter = 0  # iteritems calls
+        self.stats_iter = 0  # .items() calls
         self.stats_lookup = 0  # _lookup_index calls
         self.stats_linear = 0  # how many steps the linear search inside _lookup_index needed
         self.stats_resize_table = 0
         self.stats_resize_kv = 0
+        # initialize?
+        if items is not None:
+            for key, value in items:
+                self[key] = value
 
     def __del__(self):
         free(self.table)
@@ -208,7 +217,7 @@ cdef class HashTable:
                 raise
             return default
 
-    def iteritems(self):
+    def items(self):
         cdef int i
         cdef uint32_t kv_index
         self.stats_iter += 1
@@ -313,12 +322,23 @@ cdef class HashTable:
 
 
 cdef class HashTableNT:
-    def __init__(self, int key_size, str value_format, object namedtuple_type, int capacity = MIN_CAPACITY):
+    def __init__(self, items=None, *,
+                 key_size: int = 0, value_format: str = "", namedtuple_type: object = None,
+                 capacity: int = MIN_CAPACITY):
+        if not key_size:
+            raise ValueError("key_size must be specified and must be > 0.")
+        if not value_format:
+            raise ValueError("value_format must be specified and must be non-empty.")
+        if namedtuple_type is None:
+            raise ValueError("namedtuple_type must be specified.")
         self.key_size = key_size
         self.value_format = value_format
         self.value_size = struct.calcsize(self.value_format)
         self.namedtuple_type = namedtuple_type
-        self.inner = HashTable(self.key_size, self.value_size, capacity=capacity)
+        self.inner = HashTable(key_size=self.key_size, value_size=self.value_size, capacity=capacity)
+        if items is not None:
+            for key, value in items:
+                self[key] = value
 
     def clear(self):
         self.inner.clear()
@@ -361,8 +381,8 @@ cdef class HashTableNT:
         self._check_key(key)
         return key in self.inner
 
-    def iteritems(self):
-        for key, binary_value in self.inner.iteritems():
+    def items(self):
+        for key, binary_value in self.inner.items():
             yield (key, self._to_namedtuple_value(binary_value))
 
     def __len__(self):
@@ -435,7 +455,7 @@ cdef class HashTableNT:
         fd.write(header_bytes)
         fd.write(meta_bytes)
         count = 0
-        for key, value in self.inner.iteritems():
+        for key, value in self.inner.items():
             fd.write(key)
             fd.write(value)
             count += 1
