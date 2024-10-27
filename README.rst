@@ -99,6 +99,16 @@ Want a demo?
 
 Run ``borghash-demo`` after installing the ``borghash`` package.
 
+It will show you the demo code, run it and print the results for your machine.
+
+Results on an Apple MacBook Pro (M3 Pro CPU) are like:
+
+::
+
+    HashTableNT in-memory ops (count=50000): insert: 0.062s, lookup: 0.066s, pop: 0.061s.
+    HashTableNT serialization (count=50000): write: 0.020s, read: 0.021s.
+
+
 State of this project
 ---------------------
 
