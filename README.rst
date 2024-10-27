@@ -97,9 +97,7 @@ HashTable / HashTableNT have an API similar to a dict:
 Want a demo?
 ------------
 
-Run this to get instructions how to run the demo:
-
-``python3 -m borghash``
+Run ``borghash-demo`` after installing the ``borghash`` package.
 
 State of this project
 ---------------------

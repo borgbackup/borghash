@@ -30,7 +30,7 @@ dependencies = []
 "Changelog" = "https://github.com/borgbackup/borghash/blob/master/changes.rst"
 
 [project.scripts]
-borghash-demo = "borghash.demo:main"
+borghash-demo = "borghash:demo"
 
 [tool.setuptools]
 # See also the MANIFEST.in file.
