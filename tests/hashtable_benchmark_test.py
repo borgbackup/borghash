@@ -9,10 +9,15 @@ from .hashtable_test import H2
 
 
 @pytest.fixture(scope="module")
-def keys():
-    # use quite a lot of keys to reduce issues with timer resolution
+def items():
+    # use quite a lot of items to reduce issues with timer resolution
     # and outside influences onto the measurement.
-    return frozenset(H2(x) for x in range(1000000))
+    items = []
+    for x in range(1000000):
+        key = H2(x)
+        value_raw = key[-4:]
+        items.append((key, value_raw))
+    return frozenset(items)
 
 
 def bh():  # borghash
@@ -26,45 +31,45 @@ def pd():  # python dict
 HT_CLASSES = [bh, pd]
 
 
-def setup(ht_class, keys, fill=False):
+def setup(ht_class, items, fill=False):
     ht = ht_class()
     if fill:
-        for key in keys:
-            ht[key] = key[:4]
-    return (ht, keys), {}
+        for key, value in items:
+            ht[key] = value
+    return (ht, items), {}
 
 
 @pytest.mark.parametrize("ht_class", HT_CLASSES)
-def test_insert(benchmark, ht_class, keys):
-    def func(ht, keys):
-        for key in keys:
-            ht[key] = key[:4]
+def test_insert(benchmark, ht_class, items):
+    def func(ht, items):
+        for key, value in items:
+            ht[key] = value
 
-    benchmark.pedantic(func, setup=lambda: setup(ht_class, keys, fill=False))
-
-
-@pytest.mark.parametrize("ht_class", HT_CLASSES)
-def test_update(benchmark, ht_class, keys):
-    def func(ht, keys):
-        for key in keys:
-            ht[key] = key[-4:]  # update value for an existing ht entry
-
-    benchmark.pedantic(func, setup=lambda: setup(ht_class, keys, fill=True))
+    benchmark.pedantic(func, setup=lambda: setup(ht_class, items, fill=False))
 
 
 @pytest.mark.parametrize("ht_class", HT_CLASSES)
-def test_lookup(benchmark, ht_class, keys):
-    def func(ht, keys):
-        for key in keys:
-            assert ht[key] == key[:4]
+def test_update(benchmark, ht_class, items):
+    def func(ht, items):
+        for key, value in items:
+            ht[key] = value  # update value for an existing ht entry
 
-    benchmark.pedantic(func, setup=lambda: setup(ht_class, keys, fill=True))
+    benchmark.pedantic(func, setup=lambda: setup(ht_class, items, fill=True))
 
 
 @pytest.mark.parametrize("ht_class", HT_CLASSES)
-def test_delete(benchmark, ht_class, keys):
-    def func(ht, keys):
-        for key in keys:
+def test_lookup(benchmark, ht_class, items):
+    def func(ht, items):
+        for key, value in items:
+            assert ht[key] == value
+
+    benchmark.pedantic(func, setup=lambda: setup(ht_class, items, fill=True))
+
+
+@pytest.mark.parametrize("ht_class", HT_CLASSES)
+def test_delete(benchmark, ht_class, items):
+    def func(ht, items):
+        for key, value in items:
             del ht[key]
 
-    benchmark.pedantic(func, setup=lambda: setup(ht_class, keys, fill=True))
+    benchmark.pedantic(func, setup=lambda: setup(ht_class, items, fill=True))
