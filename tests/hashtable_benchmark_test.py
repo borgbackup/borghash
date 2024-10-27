@@ -1,70 +1,87 @@
 """
-Benchmark borghash.HashTable against CPython's dict.
+Benchmark borghash.HashTable and HashTableNT against CPython's dict.
 """
+import struct
+from collections import namedtuple
 
 import pytest
 
-from borghash import HashTable
+from borghash import HashTable, HashTableNT
 from .hashtable_test import H2
 
+VALUE_TYPE = namedtuple("value_type", "value")
+VALUE_FMT = "<I"
+KEY_SIZE = len(H2(0))
+VALUE_SIZE = len(struct.pack(VALUE_FMT, 0))
+VALUE_BITS = VALUE_SIZE * 8
 
 @pytest.fixture(scope="module")
-def keys():
-    # use quite a lot of keys to reduce issues with timer resolution
+def items():
+    # use quite a lot of items to reduce issues with timer resolution
     # and outside influences onto the measurement.
-    return frozenset(H2(x) for x in range(1000000))
+    items = []
+    for x in range(1000000):
+        key = H2(x)
+        value_raw = key[-VALUE_SIZE:]
+        value_nt = VALUE_TYPE(x % 2**VALUE_BITS)
+        items.append((key, value_raw, value_nt))
+    return frozenset(items)
 
 
 def bh():  # borghash
-    return HashTable(key_size=32, value_size=4)  # 256bit keys, 4Byte (32bit) values
+    return HashTable(key_size=KEY_SIZE, value_size=VALUE_SIZE)
+
+
+def bhnt():  # borghash
+    return HashTableNT(key_size=KEY_SIZE, value_type=VALUE_TYPE, value_format=VALUE_FMT)
 
 
 def pd():  # python dict
     return dict()
 
 
-HT_CLASSES = [bh, pd]
+TEST_PARAMS = [(bh, False), (bhnt, True), (pd, False), (pd, True)]
 
 
-def setup(ht_class, keys, fill=False):
+def setup(ht_class, items, fill=False, nt=False):
     ht = ht_class()
     if fill:
-        for key in keys:
-            ht[key] = key[:4]
-    return (ht, keys), {}
+        for key, value_raw, value_nt in items:
+            ht[key] = value_nt if nt else value_raw
+    return (ht, items, nt), {}
 
 
-@pytest.mark.parametrize("ht_class", HT_CLASSES)
-def test_insert(benchmark, ht_class, keys):
-    def func(ht, keys):
-        for key in keys:
-            ht[key] = key[:4]
+@pytest.mark.parametrize("ht_class,nt", TEST_PARAMS)
+def test_insert(benchmark, ht_class, nt, items):
+    def func(ht, items, nt):
+        for key, value_raw, value_nt in items:
+            ht[key] = value_nt if nt else value_raw
 
-    benchmark.pedantic(func, setup=lambda: setup(ht_class, keys, fill=False))
-
-
-@pytest.mark.parametrize("ht_class", HT_CLASSES)
-def test_update(benchmark, ht_class, keys):
-    def func(ht, keys):
-        for key in keys:
-            ht[key] = key[-4:]  # update value for an existing ht entry
-
-    benchmark.pedantic(func, setup=lambda: setup(ht_class, keys, fill=True))
+    benchmark.pedantic(func, setup=lambda: setup(ht_class, items, fill=False, nt=nt))
 
 
-@pytest.mark.parametrize("ht_class", HT_CLASSES)
-def test_lookup(benchmark, ht_class, keys):
-    def func(ht, keys):
-        for key in keys:
-            assert ht[key] == key[:4]
+@pytest.mark.parametrize("ht_class,nt", TEST_PARAMS)
+def test_update(benchmark, ht_class, nt, items):
+    def func(ht, items, nt):
+        for key, value_raw, value_nt in items:
+            ht[key] = value_nt if nt else value_raw  # update value for an existing ht entry
 
-    benchmark.pedantic(func, setup=lambda: setup(ht_class, keys, fill=True))
+    benchmark.pedantic(func, setup=lambda: setup(ht_class, items, fill=True, nt=nt))
 
 
-@pytest.mark.parametrize("ht_class", HT_CLASSES)
-def test_delete(benchmark, ht_class, keys):
-    def func(ht, keys):
-        for key in keys:
+@pytest.mark.parametrize("ht_class,nt", TEST_PARAMS)
+def test_lookup(benchmark, ht_class, nt, items):
+    def func(ht, items, nt):
+        for key, value_raw, value_nt in items:
+            assert ht[key] == value_nt if nt else value_raw
+
+    benchmark.pedantic(func, setup=lambda: setup(ht_class, items, fill=True, nt=nt))
+
+
+@pytest.mark.parametrize("ht_class,nt", TEST_PARAMS)
+def test_delete(benchmark, ht_class, nt, items):
+    def func(ht, items, nt):
+        for key, _, _ in items:
             del ht[key]
 
-    benchmark.pedantic(func, setup=lambda: setup(ht_class, keys, fill=True))
+    benchmark.pedantic(func, setup=lambda: setup(ht_class, items, fill=True, nt=nt))
