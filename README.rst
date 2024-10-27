@@ -97,9 +97,17 @@ HashTable / HashTableNT have an API similar to a dict:
 Want a demo?
 ------------
 
-Run this to get instructions how to run the demo:
+Run ``borghash-demo`` after installing the ``borghash`` package.
 
-``python3 -m borghash``
+It will show you the demo code, run it and print the results for your machine.
+
+Results on an Apple MacBook Pro (M3 Pro CPU) are like:
+
+::
+
+    HashTableNT in-memory ops (count=50000): insert: 0.062s, lookup: 0.066s, pop: 0.061s.
+    HashTableNT serialization (count=50000): write: 0.020s, read: 0.021s.
+
 
 State of this project
 ---------------------
