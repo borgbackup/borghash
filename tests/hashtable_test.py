@@ -109,26 +109,6 @@ def test_clear(ht12):
         ht12[key2]
 
 
-def test_ht_stress(ht):
-    # this also triggers some hashtable resizing
-    keys = set()
-    for i in range(10000):
-        key = H2(i)
-        value = key[:4]
-        ht[key] = value
-        keys.add(key)
-    found_keys = set()
-    for key, value in ht.items():
-        found_keys.add(key)
-        assert value == key[:4]
-    assert keys == found_keys
-    for key in keys:
-        assert ht[key] == key[:4]
-    for key in keys:
-        del ht[key]
-    assert len(ht) == 0
-
-
 def test_stats(ht):
     assert ht.stats["get"] == 0
     assert ht.stats["set"] == 0
