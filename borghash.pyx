@@ -348,8 +348,8 @@ cdef class HashTableNT:
         if value_type is None:
             raise ValueError("value_type must be specified (a namedtuple type corresponding to value_format).")
         self.key_size = key_size
-        self.value_format = value_format
-        self.value_size = struct.calcsize(self.value_format)
+        self.value_struct = struct.Struct(value_format)
+        self.value_size = self.value_struct.size
         self.value_type = value_type
         self.inner = HashTable(key_size=self.key_size, value_size=self.value_size, capacity=capacity)
         _fill(self, items)
@@ -369,10 +369,10 @@ cdef class HashTableNT:
                 value = self.value_type(*value)
             else:
                 raise TypeError(f"Expected an instance of {self.value_type}, got {type(value)}")
-        return struct.pack(self.value_format, *value)
+        return self.value_struct.pack(*value)
 
     def _to_namedtuple_value(self, binary_value: bytes) -> Any:
-        unpacked_data = struct.unpack(self.value_format, binary_value)
+        unpacked_data = self.value_struct.unpack(binary_value)
         return self.value_type(*unpacked_data)
 
     def _set_raw(self, key: bytes, value: bytes) -> None:
@@ -460,7 +460,7 @@ cdef class HashTableNT:
         meta = {
             'key_size': self.key_size,
             'value_size': self.value_size,
-            'value_format': self.value_format,
+            'value_format': self.value_struct.format,
             'value_type_name': self.value_type.__name__,
             'value_type_fields': self.value_type._fields,
             'capacity': self.inner.capacity,
