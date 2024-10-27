@@ -169,3 +169,8 @@ def test_size(ntht, n):
         real_size = f.tell()
     # is our estimation good enough?
     assert estimated_size * 0.9 < real_size < estimated_size * 1.0
+
+
+def test_demo():
+    from borghash import demo
+    demo()
