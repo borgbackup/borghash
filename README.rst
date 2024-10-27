@@ -94,6 +94,29 @@ HashTable / HashTableNT have an API similar to a dict:
 - ``items()``, ``len()``
 - ``read()``, ``write()``, ``size()``
 
+Example code
+------------
+
+::
+
+    # HashTableNT mapping 256bit key [bytes] --> Chunk value [namedtuple]
+    Chunk = namedtuple("Chunk", ["refcount", "size"])
+    # 256bit (32Byte) key, 2x 32bit (4Byte) values
+    ht = HashTableNT(key_size=32, value_format="<II", value_type=Chunk)
+
+    key = b"x" * 32  # the key is usually from a cryptographic hash fn
+    value = Chunk(refcount=1, size=42)
+    ht[key] = value
+    assert ht[key] == value
+
+    for key, value in ht.items():
+        assert isinstance(key, bytes)
+        assert isinstance(value, Chunk)
+
+    file = "dump.bin"  # giving an fd of a file opened in binary mode also works
+    ht.write(file)
+    ht = HashTableNT.read(file)
+
 Want a demo?
 ------------
 
