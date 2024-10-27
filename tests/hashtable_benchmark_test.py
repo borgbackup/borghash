@@ -1,6 +1,7 @@
 """
 Benchmark borghash.HashTable and HashTableNT against CPython's dict.
 """
+import struct
 from collections import namedtuple
 
 import pytest
@@ -10,7 +11,9 @@ from .hashtable_test import H2
 
 VALUE_TYPE = namedtuple("value_type", "value")
 VALUE_FMT = "<I"
-
+KEY_SIZE = len(H2(0))
+VALUE_SIZE = len(struct.pack(VALUE_FMT, 0))
+VALUE_BITS = VALUE_SIZE * 8
 
 @pytest.fixture(scope="module")
 def items():
@@ -19,18 +22,18 @@ def items():
     items = []
     for x in range(1000000):
         key = H2(x)
-        value_raw = key[-4:]
-        value_nt = VALUE_TYPE(x % 2**32)
+        value_raw = key[-VALUE_SIZE:]
+        value_nt = VALUE_TYPE(x % 2**VALUE_BITS)
         items.append((key, value_raw, value_nt))
     return frozenset(items)
 
 
 def bh():  # borghash
-    return HashTable(key_size=32, value_size=4)  # 256bit keys, 4Byte (32bit) values
+    return HashTable(key_size=KEY_SIZE, value_size=VALUE_SIZE)
 
 
 def bhnt():  # borghash
-    return HashTableNT(key_size=32, value_type=VALUE_TYPE, value_format=VALUE_FMT)  # 256b key, 1-tuple with 32b value
+    return HashTableNT(key_size=KEY_SIZE, value_type=VALUE_TYPE, value_format=VALUE_FMT)
 
 
 def pd():  # python dict
