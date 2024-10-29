@@ -45,11 +45,8 @@ For a hashtable load factor of 0.1 - 0.5, a kv array grow factor of 1.3 and
 N kv pairs, memory usage in bytes is approximately:
 
 - Hashtable: from ``N * 4 / 0.5`` to ``N * 4 / 0.1``
-- Keys: from ``N * len(key) * 1.0`` to ``N * len(key) * 1.3``
-- Values: from ``N * len(value) * 1.0`` to ``N * len(value) * 1.3``
-
-- Overall maximum: ``N * (40 + len(key + value) * 1.3)``
-- Overall minimum: ``N * (8 + len(key + value))``
+- Keys/Values: from ``N * len(key+value) * 1.0`` to ``N * len(key+value) * 1.3``
+- Overall: from ``N * (8 + len(key+value))`` to ``N * (40 + len(key+value) * 1.3)``
 
 When the hashtable or the kv arrays are resized, there will be short memory
 usage spikes. For the kv arrays, ``realloc()`` is used to avoid copying of
@@ -58,10 +55,10 @@ data and memory usage spikes, if possible.
 HashTableNT
 -----------
 
-``HashTableNT`` is a convenience wrapper around ``HashTable`` providing:
+``HashTableNT`` is a convenience wrapper around ``HashTable``:
 
 - accepts and returns ``namedtuple`` values
-- persistence: can read (write) the hashtable from (to) a file.
+- implements persistence: can read (write) the hashtable from (to) a file.
 
 Keys and Values
 ~~~~~~~~~~~~~~~
