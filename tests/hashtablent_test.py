@@ -172,5 +172,5 @@ def test_size(ntht, n):
 
 
 def test_demo():
-    from borghash import demo
+    from borghash.__main__ import demo
     demo()

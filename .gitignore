@@ -1,9 +1,10 @@
 .idea
 .pytest_cache
 .tox
+build
 dist
 __pycache__
-src/borghash.egg-info
 src/borghash/_version.py
-src/borghash/borghash.cpp
-src/*.so
+**/*.so
+**/*.c
+**/*.egg-info
