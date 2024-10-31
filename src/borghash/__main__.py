@@ -1,3 +1,7 @@
+"""
+Demonstration of borghash.
+"""
+
 def demo():
     print("BorgHash demo")
     print("=============")
