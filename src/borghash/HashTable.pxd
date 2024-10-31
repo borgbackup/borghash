@@ -2,7 +2,8 @@ from libc.stdint cimport uint8_t, uint32_t
 
 cdef class HashTable:
     cdef int ksize, vsize
-    cdef int initial_capacity, capacity, used, tombstones
+    cdef readonly int capacity, used
+    cdef int initial_capacity, tombstones
     cdef float max_load_factor, min_load_factor, shrink_factor, grow_factor
     cdef uint32_t* table
     cdef int kv_capacity, kv_used
