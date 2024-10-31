@@ -30,19 +30,10 @@ dependencies = []
 "Changelog" = "https://github.com/borgbackup/borghash/blob/master/changes.rst"
 
 [project.scripts]
-borghash-demo = "borghash:demo"
-
-[tool.setuptools]
-# See also the MANIFEST.in file.
-# We want to install all the files in the package directories...
-include-package-data = true
-
-[tool.setuptools.exclude-package-data]
-# ...except the source files which have been compiled (C extensions):
-"*" = ["*.c", "*.h", "*.pyx"]
+borghash-demo = "borghash.__main__:demo"
 
 [build-system]
-requires = ["setuptools", "wheel", "Cython>=3.0.3", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
