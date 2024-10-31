@@ -1,1 +1,2 @@
-from .HashTable import HashTable, HashTableNT
+from .HashTable import HashTable
+from .HashTableNT import HashTableNT

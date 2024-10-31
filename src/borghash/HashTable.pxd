@@ -16,11 +16,3 @@ cdef class HashTable:
     cdef int _lookup_index(self, uint8_t* key_ptr, int* index_ptr)
     cdef void _resize_table(self, int new_capacity)
     cdef void _resize_kv(self, int new_capacity)
-
-
-cdef class HashTableNT:
-    cdef int key_size
-    cdef object value_type
-    cdef object value_struct
-    cdef int value_size
-    cdef HashTable inner
