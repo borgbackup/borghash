@@ -114,6 +114,15 @@ Example code
     ht.write(file)
     ht = HashTableNT.read(file)
 
+Building / Installing
+---------------------
+::
+
+    python setup.py build_ext --inplace
+    python -m build
+    pip install dist/borghash*.tar.gz
+
+
 Want a demo?
 ------------
 
@@ -127,15 +136,6 @@ Results on an Apple MacBook Pro (M3 Pro CPU) are like:
 
     HashTableNT in-memory ops (count=50000): insert: 0.062s, lookup: 0.066s, pop: 0.061s.
     HashTableNT serialization (count=50000): write: 0.020s, read: 0.021s.
-
-
-Building / Installing
----------------------
-::
-
-    python setup.py build_ext --inplace
-    python -m build
-    pip install dist/borghash*.tar.gz
 
 
 State of this project
