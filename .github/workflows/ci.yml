@@ -54,6 +54,9 @@ jobs:
         python -m pip install --upgrade pip setuptools
         pip install -r requirements.d/dev.txt
     - name: Install borghash
-      run: pip install -ve .
+      run: |
+        python setup.py build_ext --inplace
+        python -m build
+        pip install -v dist/borghash*.tar.gz
     - name: run tox env
       run: tox --skip-missing-interpreters
