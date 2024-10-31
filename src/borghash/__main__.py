@@ -1,5 +1,3 @@
-
-
 def demo():
     print("BorgHash demo")
     print("=============")
@@ -59,3 +57,7 @@ print(f"HashTableNT serialization (count={count}): write: {t3-t2:.3f}s, read: {t
 """
     print(code)
     exec(code)
+
+
+if __name__ == "__main__":
+    demo()
