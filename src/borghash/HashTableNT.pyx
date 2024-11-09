@@ -2,6 +2,8 @@
 HashTableNT: wrapper around HashTable, providing namedtuple values and serialization.
 """
 from __future__ import annotations
+
+from collections.abc import Mapping
 from typing import BinaryIO, Iterator, Any
 
 from collections import namedtuple
@@ -110,6 +112,23 @@ cdef class HashTableNT:
             return default
         else:
             return self._to_namedtuple_value(binary_value)
+
+    def update(self, other=(), /, **kwds):
+        """Like dict.update, but other can also be a HashTableNT instance."""
+        if isinstance(other, HashTableNT):
+            for key, value in other.items():
+                self[key] = value
+        elif isinstance(other, Mapping):
+            for key in other:
+                self[key] = other[key]
+        elif hasattr(other, "keys"):
+            for key in other.keys():
+                self[key] = other[key]
+        else:
+            for key, value in other:
+                self[key] = value
+        for key, value in kwds.items():
+            self[key] = value
 
     def k_to_idx(self, key: bytes) -> int:
         return self.inner.k_to_idx(key)
