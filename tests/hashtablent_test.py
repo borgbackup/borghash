@@ -14,6 +14,7 @@ value_type = namedtuple("vt", "v1 v2 v3")
 key1, value1 = b"a" * 32, value_type(11, 12, 13)
 key2, value2 = b"b" * 32, value_type(21, 22, 23)
 key3, value3 = b"c" * 32, value_type(31, 32, 33)
+key4, value4 = b"d" * 32, value_type(41, 42, 43)
 
 
 @pytest.fixture
@@ -89,6 +90,20 @@ def test_pop(ntht12):
     with pytest.raises(KeyError):
         ntht12.pop(key3)
     assert ntht12.pop(key3, None) is None
+
+
+def test_update_kvpairs(ntht12):
+    ntht12.update([(key3, value3), (key4, value4)])
+    assert ntht12[key3] == value3
+    assert ntht12[key4] == value4
+
+
+def test_update_ntht(ntht12, ntht):
+    ntht[key3] = value3
+    ntht[key4] = value4
+    ntht12.update(ntht)
+    assert ntht12[key3] == value3
+    assert ntht12[key4] == value4
 
 
 def test_ntht_stress(ntht):
