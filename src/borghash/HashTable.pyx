@@ -106,18 +106,18 @@ cdef class HashTable:
     def __len__(self) -> int:
         return self.used
 
-    cdef int _get_index(self, uint8_t* key):
+    cdef size_t _get_index(self, uint8_t* key):
         """key must be perfectly random distributed bytes, so we don't need a hash function here."""
         cdef uint32_t key32 = (key[0] << 24) | (key[1] << 16) | (key[2] << 8) | key[3]
         return key32 % self.capacity
 
-    cdef int _lookup_index(self, uint8_t* key_ptr, int* index_ptr):
+    cdef int _lookup_index(self, uint8_t* key_ptr, size_t* index_ptr):
         """
         search for a specific key.
         if found, return 1 and set *index_ptr to the index of the bucket in self.table.
         if not found, return 0 and set *index_ptr to the index of a free bucket in self.table.
         """
-        cdef int index = self._get_index(key_ptr)
+        cdef size_t index = self._get_index(key_ptr)
         cdef uint32_t kv_index
         self.stats_lookup += 1
         while (kv_index := self.table[index]) != FREE_BUCKET:
@@ -138,7 +138,7 @@ cdef class HashTable:
         cdef uint8_t* key_ptr = <uint8_t*> key
         cdef uint8_t* value_ptr = <uint8_t*> value
         cdef uint32_t kv_index
-        cdef int index
+        cdef size_t index
         self.stats_set += 1
         if self._lookup_index(key_ptr, &index):
             kv_index = self.table[index]
@@ -173,7 +173,7 @@ cdef class HashTable:
         if len(key) != self.ksize:
             raise ValueError("Key size does not match the defined size")
         cdef uint32_t kv_index
-        cdef int index
+        cdef size_t index
         self.stats_get += 1
         if self._lookup_index(<uint8_t*> key, &index):
             kv_index = self.table[index]
@@ -185,7 +185,7 @@ cdef class HashTable:
         if len(key) != self.ksize:
             raise ValueError("Key size does not match the defined size")
         cdef uint8_t* key_ptr = <uint8_t*> key
-        cdef int index
+        cdef size_t index
         cdef uint32_t kv_index
 
         self.stats_del += 1
@@ -227,7 +227,7 @@ cdef class HashTable:
             return value
 
     def items(self) -> Iterator[tuple[bytes, bytes]]:
-        cdef int i
+        cdef size_t i
         cdef uint32_t kv_index
         self.stats_iter += 1
         for i in range(self.capacity):
@@ -237,8 +237,8 @@ cdef class HashTable:
                 value = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
                 yield key, value
 
-    cdef void _resize_table(self, int new_capacity):
-        cdef int i, index
+    cdef void _resize_table(self, size_t new_capacity):
+        cdef size_t i, index
         cdef uint32_t kv_index
         cdef uint32_t* new_table = <uint32_t*> malloc(new_capacity * sizeof(uint32_t))
         for i in range(new_capacity):
@@ -259,13 +259,13 @@ cdef class HashTable:
         self.table = new_table
         self.tombstones = 0
 
-    cdef void _resize_kv(self, int new_capacity):
+    cdef void _resize_kv(self, size_t new_capacity):
         # We must never use kv indexes >= RESERVED, thus we'll never need more capacity either.
-        cdef int capacity = min(new_capacity, RESERVED - 1)
+        cdef size_t capacity = min(new_capacity, <size_t> RESERVED - 1)
         self.stats_resize_kv += 1
         self.keys = <uint8_t*> realloc(self.keys, capacity * self.ksize * sizeof(uint8_t))
         self.values = <uint8_t*> realloc(self.values, capacity * self.vsize * sizeof(uint8_t))
-        self.kv_capacity = capacity
+        self.kv_capacity = <uint32_t> capacity
 
     def k_to_idx(self, key: bytes) -> int:
         """
@@ -274,7 +274,7 @@ cdef class HashTable:
         """
         if len(key) != self.ksize:
             raise ValueError("Key size does not match the defined size")
-        cdef int index
+        cdef size_t index
         if self._lookup_index(<uint8_t*> key, &index):
             return self.table[index]  # == uint32_t kv_index
         else:
@@ -297,7 +297,7 @@ cdef class HashTable:
             raise ValueError("Key size does not match the defined size")
         if len(value) != self.vsize:
             raise ValueError("Value size does not match the defined size")
-        cdef int index
+        cdef size_t index
         cdef uint32_t kv_index
         if self._lookup_index(<uint8_t*> key, &index):
             kv_index = self.table[index]
