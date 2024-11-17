@@ -8,8 +8,9 @@ from borghash import HashTableNT
 from .hashtable_test import H2
 
 key_size = 32  # 32 bytes = 256bits key
-value_format = "<III"  # 3x little endian 32bit unsigned int
 value_type = namedtuple("vt", "v1 v2 v3")
+value_format_t = namedtuple("vf", "v1 v2 v3")
+value_format = value_format_t(v1="<I", v2="I", v3="I")  # 3x little endian 32bit unsigned int
 
 key1, value1 = b"a" * 32, value_type(11, 12, 13)
 key2, value2 = b"b" * 32, value_type(21, 22, 23)
@@ -19,7 +20,7 @@ key4, value4 = b"d" * 32, value_type(41, 42, 43)
 
 @pytest.fixture
 def ntht():
-    return HashTableNT(key_size=key_size, value_format=value_format, value_type=value_type)
+    return HashTableNT(key_size=key_size, value_type=value_type, value_format=value_format)
 
 
 @pytest.fixture
@@ -30,10 +31,10 @@ def ntht12(ntht):
 
 
 def test_init():
-    ht = HashTableNT(key_size=32, value_format=value_format, value_type=value_type)
+    ht = HashTableNT(key_size=32, value_type=value_type, value_format=value_format)
     assert len(ht) == 0
     items = [(key1, value1), (key2, value2)]
-    ht = HashTableNT(items, key_size=32, value_format=value_format, value_type=value_type)
+    ht = HashTableNT(items, key_size=32, value_type=value_type, value_format=value_format)
     assert ht[key1] == value1
     assert ht[key2] == value2
 
