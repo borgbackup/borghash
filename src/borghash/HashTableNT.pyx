@@ -21,18 +21,23 @@ _NoDefault = object()
 
 cdef class HashTableNT:
     def __init__(self, items=None, *,
-                 key_size: int = 0, value_format: str = "", value_type: Any = None,
+                 key_size: int, value_type: Any, value_format: Any,
                  capacity: int = MIN_CAPACITY) -> None:
-        if not key_size:
-            raise ValueError("key_size must be specified and must be > 0.")
-        if not value_format:
-            raise ValueError("value_format must be specified and must be non-empty.")
-        if value_type is None:
-            raise ValueError("value_type must be specified (a namedtuple type corresponding to value_format).")
+        if not isinstance(key_size, int) or not key_size > 0:
+            raise ValueError("key_size must be an integer and > 0.")
+        if type(value_type) is not type:
+            raise TypeError("value_type must be a namedtuple type.")
+        if not isinstance(value_format, tuple):
+            raise TypeError("value_format must be a namedtuple instance.")
+        if value_format._fields != value_type._fields:
+            raise TypeError("value_format's and value_type's element names must correspond.")
+        if not all(isinstance(fmt, str) and len(fmt) > 0 for fmt in value_format):
+            raise ValueError("value_format's elements must be str and non-empty.")
         self.key_size = key_size
-        self.value_struct = struct.Struct(value_format)
-        self.value_size = self.value_struct.size
         self.value_type = value_type
+        self.value_format = value_format
+        self.value_struct = struct.Struct("".join(value_format))
+        self.value_size = self.value_struct.size
         self.inner = HashTable(key_size=self.key_size, value_size=self.value_size, capacity=capacity)
         _fill(self, items)
 
@@ -159,9 +164,11 @@ cdef class HashTableNT:
         meta = {
             'key_size': self.key_size,
             'value_size': self.value_size,
-            'value_format': self.value_struct.format,
             'value_type_name': self.value_type.__name__,
             'value_type_fields': self.value_type._fields,
+            'value_format_name': self.value_format.__class__.__name__,
+            'value_format_fields': self.value_format._fields,
+            'value_format': self.value_format,
             'capacity': self.inner.capacity,
             'used': self.inner.used,  # count of keys / values
         }
@@ -201,7 +208,9 @@ cdef class HashTableNT:
             raise ValueError(f"Invalid file, file is too short.")
         meta = json.loads(meta_bytes.decode("utf-8"))
         value_type = namedtuple(meta['value_type_name'], meta['value_type_fields'])
-        ht = cls(key_size=meta['key_size'], value_format=meta['value_format'], value_type=value_type, capacity=meta['capacity'])
+        value_format_t = namedtuple(meta['value_format_name'], meta['value_format_fields'])
+        value_format = value_format_t(*meta['value_format'])
+        ht = cls(key_size=meta['key_size'], value_format=value_format, value_type=value_type, capacity=meta['capacity'])
         count = 0
         ksize, vsize = meta['key_size'], meta['value_size']
         for i in range(meta['used']):
