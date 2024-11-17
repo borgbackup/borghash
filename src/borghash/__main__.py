@@ -16,7 +16,7 @@ from .HashTableNT import HashTableNT
 count = 50000
 value_type = namedtuple("Chunk", ["refcount", "size"])
 value_format_t = namedtuple("ChunkFormat", ["refcount", "size"])
-value_format = value_format_t(refcount="<I", size="I")
+value_format = value_format_t(refcount="I", size="I")
 # 256bit (32Byte) key, 2x 32bit (4Byte) values
 ht = HashTableNT(key_size=32, value_type=value_type, value_format=value_format)
 

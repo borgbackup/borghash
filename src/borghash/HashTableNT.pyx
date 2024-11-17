@@ -17,12 +17,14 @@ assert len(MAGIC) == 8
 VERSION = 1  # version of the on-disk (serialized) format produced by .write().
 HEADER_FMT = "<8sII"  # magic, version, meta length
 
+BYTE_ORDER = dict(big=">", little="<", network="!", native="=")  # struct format chars
+
 _NoDefault = object()
 
 cdef class HashTableNT:
     def __init__(self, items=None, *,
                  key_size: int, value_type: Any, value_format: Any,
-                 capacity: int = MIN_CAPACITY) -> None:
+                 capacity: int = MIN_CAPACITY, byte_order="little") -> None:
         if not isinstance(key_size, int) or not key_size > 0:
             raise ValueError("key_size must be an integer and > 0.")
         if type(value_type) is not type:
@@ -33,10 +35,13 @@ cdef class HashTableNT:
             raise TypeError("value_format's and value_type's element names must correspond.")
         if not all(isinstance(fmt, str) and len(fmt) > 0 for fmt in value_format):
             raise ValueError("value_format's elements must be str and non-empty.")
+        if byte_order not in BYTE_ORDER:
+            raise ValueError("byte_order must be one of: {','.join(BYTE_ORDER.keys())}")
         self.key_size = key_size
         self.value_type = value_type
         self.value_format = value_format
-        self.value_struct = struct.Struct("".join(value_format))
+        self.byte_order = byte_order
+        self.value_struct = struct.Struct(BYTE_ORDER[byte_order] + "".join(value_format))
         self.value_size = self.value_struct.size
         self.inner = HashTable(key_size=self.key_size, value_size=self.value_size, capacity=capacity)
         _fill(self, items)
@@ -164,6 +169,7 @@ cdef class HashTableNT:
         meta = {
             'key_size': self.key_size,
             'value_size': self.value_size,
+            'byte_order': self.byte_order,
             'value_type_name': self.value_type.__name__,
             'value_type_fields': self.value_type._fields,
             'value_format_name': self.value_format.__class__.__name__,
@@ -210,7 +216,8 @@ cdef class HashTableNT:
         value_type = namedtuple(meta['value_type_name'], meta['value_type_fields'])
         value_format_t = namedtuple(meta['value_format_name'], meta['value_format_fields'])
         value_format = value_format_t(*meta['value_format'])
-        ht = cls(key_size=meta['key_size'], value_format=value_format, value_type=value_type, capacity=meta['capacity'])
+        ht = cls(key_size=meta['key_size'], value_format=value_format, value_type=value_type,
+                 capacity=meta['capacity'], byte_order=meta['byte_order'])
         count = 0
         ksize, vsize = meta['key_size'], meta['value_size']
         for i in range(meta['used']):
