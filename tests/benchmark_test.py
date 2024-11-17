@@ -11,7 +11,7 @@ from .hashtable_test import H2
 
 VALUE_TYPE = namedtuple("value_type", "value")
 VALUE_FMT_TYPE = namedtuple("value_format", "value")
-VALUE_FMT = VALUE_FMT_TYPE("<I")
+VALUE_FMT = VALUE_FMT_TYPE("I")
 KEY_SIZE = len(H2(0))
 VALUE_SIZE = len(struct.pack("".join(VALUE_FMT), 0))
 VALUE_BITS = VALUE_SIZE * 8

@@ -10,7 +10,7 @@ from .hashtable_test import H2
 key_size = 32  # 32 bytes = 256bits key
 value_type = namedtuple("vt", "v1 v2 v3")
 value_format_t = namedtuple("vf", "v1 v2 v3")
-value_format = value_format_t(v1="<I", v2="I", v3="I")  # 3x little endian 32bit unsigned int
+value_format = value_format_t(v1="I", v2="I", v3="I")  # 3x little endian 32bit unsigned int
 
 key1, value1 = b"a" * 32, value_type(11, 12, 13)
 key2, value2 = b"b" * 32, value_type(21, 22, 23)
