@@ -98,8 +98,11 @@ Example code
 
     # HashTableNT mapping 256bit key [bytes] --> Chunk value [namedtuple]
     Chunk = namedtuple("Chunk", ["refcount", "size"])
+    ChunkFormat = namedtuple("ChunkFormat", ["refcount", "size"])
+    chunk_format = ChunkFormat(refcount="I", size="I")
+
     # 256bit (32Byte) key, 2x 32bit (4Byte) values
-    ht = HashTableNT(key_size=32, value_format="<II", value_type=Chunk)
+    ht = HashTableNT(key_size=32, value_type=Chunk, value_format=chunk_format)
 
     key = b"x" * 32  # the key is usually from a cryptographic hash fn
     value = Chunk(refcount=1, size=42)
