@@ -263,6 +263,7 @@ cdef class HashTable:
         # We must never use kv indexes >= RESERVED, thus we'll never need more capacity either.
         cdef size_t capacity = min(new_capacity, <size_t> RESERVED - 1)
         self.stats_resize_kv += 1
+        //realloc is already highly optimized (in linux). By using mremap internally only the peak address space usage is "old size" + "new size", the peak memory usage is "new size".
         self.keys = <uint8_t*> realloc(self.keys, capacity * self.ksize * sizeof(uint8_t))
         self.values = <uint8_t*> realloc(self.values, capacity * self.vsize * sizeof(uint8_t))
         self.kv_capacity = <uint32_t> capacity
