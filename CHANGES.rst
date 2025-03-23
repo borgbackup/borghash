@@ -1,6 +1,12 @@
 ChangeLog
 =========
 
+Version 0.1.0 2024-11-18
+------------------------
+
+- HashTableNT: deal with byte_order separately
+- HashTableNT: give separate formats in value_format namedtuple
+
 Version 0.0.2 2024-11-10
 ------------------------
 
