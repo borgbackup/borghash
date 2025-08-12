@@ -8,20 +8,20 @@ from borghash import HashTable
 
 def H(x, y):
     """
-    Create a 256bit key - x will determine the first 32 bits, y will determine the last 32bit.
-    As our HashTable computes the ht index from first 32 bits, same x will give same ht index (a collision).
+    Create a 256-bit key—x determines the first 32 bits, y determines the last 32 bits.
+    As our HashTable computes the hash table (ht) index from the first 32 bits, the same x will give the same index (a collision).
     """
-    return struct.pack(">IIIIIIII", x, 0, 0, 0, 0, 0, 0, y)  # BE is easier to read.
+    return struct.pack(">IIIIIIII", x, 0, 0, 0, 0, 0, 0, y)  # Big-endian (BE) is easier to read.
 
 
 @pytest.fixture
 def ht():
-    # 256bit keys, 32bit values
+    # 256-bit keys, 32-bit values
     return HashTable(key_size=32, value_size=4)
 
 
 def check(ht, pydict, destructive=False):
-    """check if ht has same contents as pydict"""
+    """Check whether ht has the same contents as pydict."""
     assert len(ht) == len(pydict)
     assert dict(ht.items()) == pydict
     for key, value in pydict.items():
@@ -37,7 +37,7 @@ def check(ht, pydict, destructive=False):
 def test_few_collisions_stress(ht):
     pydict = {}
     for h in range(10000):
-        key = H(h, h)  # few collisions
+        key = H(h, h)  # Few collisions
         value = key[-4:]
         ht[key] = value
         pydict[key] = value
@@ -47,7 +47,7 @@ def test_few_collisions_stress(ht):
 def test_many_collisions_stress(ht):
     pydict = {}
     for h in range(10000):
-        key = H(0, h)  # everything collides
+        key = H(0, h)  # Everything collides
         value = key[-4:]
         ht[key] = value
         pydict[key] = value
@@ -64,7 +64,7 @@ def test_ht_vs_dict_stress(ht, delete_threshold):
             keys = set()
             while len(keys) < count:
                 x = random.randint(0, UINT32_MAX)
-                key = H(x, x)  # few collisions
+                key = H(x, x)  # Few collisions
                 keys.add(key)
             return keys
 

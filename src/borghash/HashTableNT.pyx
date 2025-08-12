@@ -34,9 +34,9 @@ cdef class HashTableNT:
         if value_format._fields != value_type._fields:
             raise TypeError("value_format's and value_type's element names must correspond.")
         if not all(isinstance(fmt, str) and len(fmt) > 0 for fmt in value_format):
-            raise ValueError("value_format's elements must be str and non-empty.")
+            raise ValueError("value_format's elements must be strings and non-empty.")
         if byte_order not in BYTE_ORDER:
-            raise ValueError("byte_order must be one of: {','.join(BYTE_ORDER.keys())}")
+            raise ValueError(f"byte_order must be one of: {', '.join(BYTE_ORDER.keys())}")
         self.key_size = key_size
         self.value_type = value_type
         self.value_format = value_format
@@ -124,7 +124,7 @@ cdef class HashTableNT:
             return self._to_namedtuple_value(binary_value)
 
     def update(self, other=(), /, **kwds):
-        """Like dict.update, but other can also be a HashTableNT instance."""
+        """Like dict.update(), but 'other' can also be a HashTableNT instance."""
         if isinstance(other, HashTableNT):
             for key, value in other.items():
                 self[key] = value
@@ -228,9 +228,9 @@ cdef class HashTableNT:
 
     def size(self) -> int:
         """
-        do a rough worst-case estimate of the on-disk size when using .write().
+        Do a rough worst-case estimate of the on-disk size when using .write().
 
-        the serialized size of the metadata is a bit hard to predict, but we cover that with one_time_overheads.
+        The serialized size of the metadata is a bit hard to predict, but we cover that with one_time_overheads.
         """
         one_time_overheads = 4096  # very rough
         N = self.inner.used

@@ -4,25 +4,25 @@ import pytest
 
 from borghash import HashTable
 
-# 256bit keys, 32bit values
+# 256-bit keys, 32-bit values
 key1, value1 = b"a" * 32, b"A" * 4
 key2, value2 = b"b" * 32, b"B" * 4
 key3, value3 = b"c" * 32, b"C" * 4
 
 
 def H(x):
-    # make some 32byte long thing that depends on x
+    # Make a 32-byte-long value that depends on x
     return bytes("%-0.32d" % x, "ascii")
 
 
 def H2(x):
-    # like H(x), but with pseudo-random distribution of the output value
+    # Like H(x), but with a pseudo-random distribution of the output value.
     return hashlib.sha256(H(x)).digest()
 
 
 @pytest.fixture
 def ht():
-    # 8 entries initially, 256bit keys, 4Byte (32bit) values
+    # 8 entries initially, 256-bit keys, 4-byte (32-bit) values
     return HashTable(key_size=32, value_size=4)
 
 

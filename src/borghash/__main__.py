@@ -1,5 +1,5 @@
 """
-Demonstration of borghash.
+Demonstration of BorgHash.
 """
 
 def demo():
@@ -17,12 +17,12 @@ count = 50000
 value_type = namedtuple("Chunk", ["refcount", "size"])
 value_format_t = namedtuple("ChunkFormat", ["refcount", "size"])
 value_format = value_format_t(refcount="I", size="I")
-# 256bit (32Byte) key, 2x 32bit (4Byte) values
+# 256-bit (32-byte) key, 2x 32-bit (4-byte) values
 ht = HashTableNT(key_size=32, value_type=value_type, value_format=value_format)
 
 t0 = time()
 for i in range(count):
-    # make up a 256bit key from i, first 32bits need to be well distributed.
+    # Make up a 256-bit key from i; the first 32 bits need to be well distributed.
     key = f"{i:4x}{' '*28}".encode()
     value = value_type(refcount=i, size=i * 2)
     ht[key] = value
@@ -50,7 +50,7 @@ assert len(ht_read) == count, f"{len(ht_read)} != {count}"
 
 t4 = time()
 for i in range(count):
-    # make up a 256bit key from i, first 32bits need to be well distributed.
+    # Make up a 256-bit key from i; the first 32 bits need to be well distributed.
     key = f"{i:4x}{' '*28}".encode()
     expected_value = value_type(refcount=i, size=i * 2)
     assert ht_read.pop(key) == expected_value
