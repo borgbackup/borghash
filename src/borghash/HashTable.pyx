@@ -1,5 +1,5 @@
 """
-HashTable: low-level hash table mapping fully random byte keys to byte values.
+HashTable: low-level hash table mapping fully random bytes keys to bytes values.
            Key and value lengths can be chosen, but are fixed thereafter.
            The keys and values are stored in arrays separate from the hashtable.
            The hashtable only stores the 32-bit indices into the key/value arrays.

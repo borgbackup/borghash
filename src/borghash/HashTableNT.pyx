@@ -34,7 +34,7 @@ cdef class HashTableNT:
         if value_format._fields != value_type._fields:
             raise TypeError("value_format's and value_type's element names must correspond.")
         if not all(isinstance(fmt, str) and len(fmt) > 0 for fmt in value_format):
-            raise ValueError("value_format's elements must be strings and non-empty.")
+            raise ValueError("value_format's elements must be str and non-empty.")
         if byte_order not in BYTE_ORDER:
             raise ValueError(f"byte_order must be one of: {', '.join(BYTE_ORDER.keys())}")
         self.key_size = key_size

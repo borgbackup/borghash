@@ -8,7 +8,7 @@ from borghash import HashTable
 
 def H(x, y):
     """
-    Create a 256-bit key—x determines the first 32 bits, y determines the last 32 bits.
+    Create a 256-bit key; x determines the first 32 bits, y determines the last 32 bits.
     As our HashTable computes the hash table (ht) index from the first 32 bits, the same x will give the same index (a collision).
     """
     return struct.pack(">IIIIIIII", x, 0, 0, 0, 0, 0, 0, y)  # Big-endian (BE) is easier to read.

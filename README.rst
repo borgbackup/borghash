@@ -35,7 +35,7 @@ indices can be used outside of ``HashTable`` as memory-efficient references.
 Memory allocated
 ~~~~~~~~~~~~~~~~
 
-For a hashtable load factor of 0.1–0.5, a kv array growth factor of 1.3, and
+For a hashtable load factor of 0.1 – 0.5, a kv array growth factor of 1.3, and
 N kv pairs, memory usage in bytes is approximately:
 
 - Hashtable: from ``N * 4 / 0.5`` to ``N * 4 / 0.1``
