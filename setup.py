@@ -3,7 +3,7 @@ from setuptools import Extension, setup
 try:
     from Cython.Build import cythonize
 except ImportError:
-    cythonize = None  # we don't have cython installed
+    cythonize = None  # we don't have Cython installed
 
 ext = '.pyx' if cythonize else '.c'
 

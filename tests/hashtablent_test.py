@@ -7,10 +7,10 @@ from borghash import HashTableNT
 
 from .hashtable_test import H2
 
-key_size = 32  # 32 bytes = 256bits key
+key_size = 32  # 32 bytes = 256-bit key
 value_type = namedtuple("vt", "v1 v2 v3")
 value_format_t = namedtuple("vf", "v1 v2 v3")
-value_format = value_format_t(v1="I", v2="I", v3="I")  # 3x little endian 32bit unsigned int
+value_format = value_format_t(v1="I", v2="I", v3="I")  # 3x little-endian 32-bit unsigned integers
 
 key1, value1 = b"a" * 32, value_type(11, 12, 13)
 key2, value2 = b"b" * 32, value_type(21, 22, 23)
@@ -108,7 +108,7 @@ def test_update_ntht(ntht12, ntht):
 
 
 def test_ntht_stress(ntht):
-    # this also triggers some hashtable resizing
+    # This also triggers some hashtable resizing.
     keys = set()
     for i in range(10000):
         key = H2(i)
@@ -170,20 +170,20 @@ def test_read_write(ntht12, tmp_path):
 
 @pytest.mark.parametrize("n", [1000, 10000, 100000, 1000000])
 def test_size(ntht, n):
-    # fill the ht
+    # Fill the hashtable.
     for i in range(n):
         key = H2(i)
         v = key[0]
-        # use mid-size integers as values (not too small, not too big)
+        # Use mid-size integers as values (not too small, not too big).
         value = value_type(v * 123456, v * 234567, v * 345678)
         ntht[key] = value
-    # estimate size
+    # Estimate size.
     estimated_size = ntht.size()
-    # serialize and determine real size
+    # Serialize and determine the actual size.
     with BytesIO() as f:
         ntht.write(f)
         real_size = f.tell()
-    # is our estimation good enough?
+    # Is our estimate good enough?
     assert estimated_size * 0.9 < real_size < estimated_size * 1.0
 
 

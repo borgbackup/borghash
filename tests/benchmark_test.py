@@ -18,8 +18,8 @@ VALUE_BITS = VALUE_SIZE * 8
 
 @pytest.fixture(scope="module")
 def items():
-    # use quite a lot of items to reduce issues with timer resolution
-    # and outside influences onto the measurement.
+    # Use many items to reduce issues with timer resolution
+    # and external influences on the measurement.
     items = []
     for x in range(1000000):
         key = H2(x)
@@ -29,15 +29,15 @@ def items():
     return frozenset(items)
 
 
-def bh():  # borghash
+def bh():  # BorgHash
     return HashTable(key_size=KEY_SIZE, value_size=VALUE_SIZE)
 
 
-def bhnt():  # borghash
+def bhnt():  # BorgHash
     return HashTableNT(key_size=KEY_SIZE, value_type=VALUE_TYPE, value_format=VALUE_FMT)
 
 
-def pd():  # python dict
+def pd():  # Python dict
     return dict()
 
 
@@ -65,7 +65,7 @@ def test_insert(benchmark, ht_class, nt, items):
 def test_update(benchmark, ht_class, nt, items):
     def func(ht, items, nt):
         for key, value_raw, value_nt in items:
-            ht[key] = value_nt if nt else value_raw  # update value for an existing ht entry
+            ht[key] = value_nt if nt else value_raw  # Update the value for an existing hashtable entry
 
     benchmark.pedantic(func, setup=lambda: setup(ht_class, items, fill=True, nt=nt))
 

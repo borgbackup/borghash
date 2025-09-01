@@ -1,8 +1,8 @@
 """
-HashTable: low-level ht mapping fully random bytes keys to bytes values.
-           key and value length can be chosen, but is fixed afterwards.
-           the keys and values are stored in arrays separate from the hashtable.
-           the hashtable only stores the 32bit indexes into the key/value arrays.
+HashTable: low-level hash table mapping fully random bytes keys to bytes values.
+           Key and value lengths can be chosen, but are fixed thereafter.
+           The keys and values are stored in arrays separate from the hashtable.
+           The hashtable only stores the 32-bit indices into the key/value arrays.
 """
 from __future__ import annotations
 from typing import BinaryIO, Iterator, Any
@@ -49,7 +49,7 @@ cdef class HashTable:
                  shrink_factor: float = 0.4, grow_factor: float = 2.0,
                  kv_grow_factor: float = 1.3) -> None:
         # the load of the ht (.table) shall be between 0.25 and 0.5, so it is fast and has few collisions.
-        # it is cheap to have a low hash table load, because .table only stores uint32_t indexes into the
+        # it is cheap to have a low hash table load, because .table only stores uint32_t indices into the
         # .keys and .values array.
         # the keys/values arrays have bigger elements and are not hash tables, thus collisions and load
         # factor are no concern there. the kv_grow_factor can be relatively small.
@@ -96,7 +96,7 @@ cdef class HashTable:
         free(self.values)
 
     def clear(self) -> None:
-        """empty HashTable, start from scratch"""
+        """Empty the HashTable and start from scratch."""
         self.capacity = 0
         self.used = 0
         self._resize_table(self.initial_capacity)
@@ -107,7 +107,7 @@ cdef class HashTable:
         return self.used
 
     cdef size_t _get_index(self, uint8_t* key):
-        """key must be perfectly random distributed bytes, so we don't need a hash function here."""
+        """Key must be perfectly random bytes, so we don't need a hash function here."""
         cdef uint32_t key32 = (key[0] << 24) | (key[1] << 16) | (key[2] << 8) | key[3]
         return key32 % self.capacity
 
@@ -149,7 +149,7 @@ cdef class HashTable:
             self._resize_kv(int(self.kv_capacity * self.kv_grow_factor))
         if self.kv_used >= self.kv_capacity:
             # Should never happen. See "RESERVED" constant - we allow almost 4Gi kv entries.
-            # For a typical 256bit key and a small 32bit value that would already consume 176GiB+
+            # For a typical 256-bit key and a small 32-bit value that would already consume 176GiB+
             # memory (plus spikes to even more when hashtable or kv arrays get resized).
             raise RuntimeError("KV array is full")
 
@@ -260,7 +260,7 @@ cdef class HashTable:
         self.tombstones = 0
 
     cdef void _resize_kv(self, size_t new_capacity):
-        # We must never use kv indexes >= RESERVED, thus we'll never need more capacity either.
+        # We must never use kv indices >= RESERVED; thus, we'll never need more capacity either.
         cdef size_t capacity = min(new_capacity, <size_t> RESERVED - 1)
         self.stats_resize_kv += 1
         # realloc is already highly optimized (in Linux). By using mremap internally only the peak address space usage is "old size" + "new size", while the peak memory usage is only "new size".
@@ -270,8 +270,8 @@ cdef class HashTable:
 
     def k_to_idx(self, key: bytes) -> int:
         """
-        return the key's index in the keys array (index is stable while in memory).
-        this can be used to "abbreviate" a known key (e.g. 256bit key -> 32bit index).
+        Return the key's index in the keys array (index is stable while in memory).
+        This can be used to "abbreviate" a known key (e.g., 256-bit key -> 32-bit index).
         """
         if len(key) != self.ksize:
             raise ValueError("Key size does not match the defined size")
@@ -283,16 +283,16 @@ cdef class HashTable:
 
     def idx_to_k(self, idx: int) -> bytes:
         """
-        for a given index, return the key stored at that index in the keys array.
-        this is the reverse of k_to_idx (e.g. 32bit index -> 256bit key).
+        For a given index, return the key stored at that index in the keys array.
+        This is the reverse of k_to_idx (e.g., 32-bit index -> 256-bit key).
         """
         cdef uint32_t kv_index = <uint32_t> idx
         return self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
 
     def kv_to_idx(self, key: bytes, value: bytes) -> int:
         """
-        return the key's/value's index in the keys/values array (index is stable while in memory).
-        this can be used to "abbreviate" a known key/value pair. (e.g. 256bit key + 32bit value -> 32bit index).
+        Return the key's/value's index in the keys/values array (index is stable while in memory).
+        This can be used to "abbreviate" a known key/value pair (e.g., 256-bit key + 32-bit value -> 32-bit index).
         """
         if len(key) != self.ksize:
             raise ValueError("Key size does not match the defined size")
@@ -309,8 +309,8 @@ cdef class HashTable:
 
     def idx_to_kv(self, idx: int) -> tuple[bytes, bytes]:
         """
-        for a given index, return the key/value stored at that index in the keys/values array.
-        this is the reverse of kv_to_idx (e.g. 32bit index -> 256bit key + 32bit value).
+        For a given index, return the key/value stored at that index in the keys/values array.
+        This is the reverse of kv_to_idx (e.g., 32-bit index -> 256-bit key + 32-bit value).
         """
         cdef uint32_t kv_index = <uint32_t> idx
         key = self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
