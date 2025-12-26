@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.1.1 (not released yet)
+--------------------------------
+
+- cythonize with latest Cython release
+- use SPDX license identifier, require a recent setuptools
+- add support for Python 3.14, remove 3.9
+- migrate tox configuration to pyproject.toml
+- fix typos and grammar
+
 Version 0.1.0 2024-11-18
 ------------------------
 
