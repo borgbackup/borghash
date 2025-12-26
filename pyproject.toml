@@ -6,23 +6,23 @@ maintainers = [
     {name="Thomas Waldmann", email="tw@waldmann-edv.de"},
 ]
 description = "Memory-efficient hash table (implemented in Cython)"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["hashtable", "memory", "efficient", "dense"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: BSD License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-license = {text="BSD"}
+license = "BSD-3-Clause"
+license-files = ["LICENSE.rst"]
 dependencies = []
 
 [project.urls]
@@ -33,7 +33,7 @@ dependencies = []
 borghash-demo = "borghash.__main__:demo"
 
 [build-system]
-requires = ["setuptools", "wheel", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=78.1.1", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
@@ -43,7 +43,7 @@ markers = []
 
 
 [tool.tox]
-env_list = ["py39", "py310", "py311", "py312", "py313"]
+env_list = ["py310", "py311", "py312", "py313", "py314"]
 
 [tool.tox.env]
 

@@ -1,4 +1,4 @@
-Copyright (C) 2024 Thomas Waldmann <tw@waldmann-edv.de>
+Copyright (C) 2024-2025 Thomas Waldmann <tw@waldmann-edv.de>
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
