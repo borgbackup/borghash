@@ -6,7 +6,7 @@ maintainers = [
     {name="Thomas Waldmann", email="tw@waldmann-edv.de"},
 ]
 description = "Memory-efficient hash table (implemented in Cython)"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["hashtable", "memory", "efficient", "dense"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -14,7 +14,6 @@ classifiers = [
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -44,7 +43,7 @@ markers = []
 
 
 [tool.tox]
-env_list = ["py39", "py310", "py311", "py312", "py313", "py314"]
+env_list = ["py310", "py311", "py312", "py313", "py314"]
 
 [tool.tox.env]
 
