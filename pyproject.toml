@@ -40,3 +40,15 @@ build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
 markers = []
+
+
+[tool.tox]
+env_list = ["py39", "py310", "py311", "py312", "py313"]
+
+[tool.tox.env]
+
+[tool.tox.env.py]
+deps = ["pytest", "pytest-benchmark"]
+commands = [
+    ["pytest", "-v", "-rs", "--benchmark-columns=mean", "--benchmark-sort=name", "--benchmark-group-by=func"]
+]
