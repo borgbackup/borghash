@@ -129,9 +129,8 @@ Results on an Apple MacBook Pro (M3 Pro CPU) look like:
 
 ::
 
-    HashTableNT in-memory ops (count=50000): insert: 0.062s, lookup: 0.066s, pop: 0.061s.
-    HashTableNT serialization (count=50000): write: 0.020s, read: 0.021s.
-
+    HashTableNT in-memory ops (count=50000): insert: 0.042s, lookup: 0.045s, pop: 0.043s.
+    HashTableNT serialization (count=50000): write: 0.014s, read: 0.010s.
 
 State of this project
 ---------------------
