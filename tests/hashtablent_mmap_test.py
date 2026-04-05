@@ -120,3 +120,33 @@ def test_mmap_corrupt_magic(tmp_path):
     path.write_bytes(b"NOTBORG" + b"\x00" * 100)
     with pytest.raises(ValueError, match="magic BORGHASH not found"):
         HashTableNT.open_mmap(str(path))
+
+
+def test_mmap_delete_persistence(tmp_path):
+    path = str(tmp_path / "delete_test.borghash")
+    # use a mmapped HashTableNT
+    ht = HashTableNT(key_size=key_size, value_type=value_type, value_format=value_format, path=path)
+
+    # add 100 entries
+    for i in range(100):
+        ht[H2(i)] = value_type(i, i, i)
+    assert len(ht) == 100
+
+    # delete 50 entries
+    for i in range(25, 75):
+        del ht[H2(i)]
+    assert len(ht) == 50
+
+    # flush ht to disk
+    ht.write_header()
+    del ht
+
+    # open that ht again via mmap and check if the ht size is 50
+    ht2 = HashTableNT(key_size=key_size, value_type=value_type, value_format=value_format, path=path)
+    assert len(ht2) == 50
+
+    # verification of entries
+    for i in range(50, 100):
+        assert ht2[H2(i)] == value_type(i, i, i)
+    for i in range(50):
+        assert H2(i) not in ht2
