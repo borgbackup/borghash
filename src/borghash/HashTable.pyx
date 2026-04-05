@@ -119,12 +119,16 @@ cdef class HashTable:
 
     def __del__(self) -> None:
         free(self.table)
+        self.table = NULL
         if self.fd != -1:
             if self.kv != NULL:
                 munmap(self.kv - self.kv_offset, self.mmap_size)
+                self.kv = NULL
             close(self.fd)
+            self.fd = -1
         else:
             free(self.kv)
+            self.kv = NULL
 
     def clear(self) -> None:
         """Empty the HashTable and start from scratch."""
@@ -339,8 +343,7 @@ cdef class HashTable:
                 # Don't shrink automatically during resize if we already have space.
                 # This prevents truncating an existing file's data when it's opened
                 # with a smaller initial_capacity than the file already contains.
-                # HOWEVER, if capacity is kv_used, we might be in shrink_to_fit.
-                # Let's allow shrinking if capacity < self.kv_capacity.
+                # HOWEVER, we MUST shrink if capacity < self.kv_capacity (e.g. shrink_to_fit).
                 if new_mmap_size <= self.mmap_size and capacity >= self.kv_capacity:
                     return
                 munmap(self.kv - self.kv_offset, self.mmap_size)
@@ -359,11 +362,6 @@ cdef class HashTable:
     def shrink_to_fit(self) -> None:
         """Shrink the KV array and the file to the actually used size."""
         self._resize_kv(self.kv_used)
-        if self.fd != -1:
-            # _resize_kv already calls ftruncate to new_mmap_size,
-            # which is kv_offset + capacity * entry_size.
-            # Here capacity is self.kv_used.
-            pass
 
     def k_to_idx(self, key: bytes) -> int:
         """

@@ -307,6 +307,10 @@ cdef class HashTableNT:
         """Write/update the file header and metadata. Required for mmapped files."""
         if self.inner.fd == -1:
              raise RuntimeError("Not a memory-mapped HashTableNT (no path/fd).")
+
+        # Always shrink to fit before writing header
+        self.inner.shrink_to_fit()
+
         # Save current position
         cdef off_t current_pos = lseek(self.inner.fd, 0, SEEK_CUR)
         # Seek to start

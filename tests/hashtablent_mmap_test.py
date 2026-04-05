@@ -86,21 +86,20 @@ def test_mmap_shrink_to_fit(tmp_path):
     ht.write(path)
     
     ht_mmap = HashTableNT.open_mmap(path)
-    # Add items to trigger growth of kv_capacity beyond kv_used
-    for i in range(100, 200):
+    # Add enough items to trigger KV growth
+    for i in range(100, 1000):
          ht_mmap[H2(i)] = value_type(i, 0, 0)
     
-    # After 200 items, kv_capacity > 200 (due to kv_grow_factor)
-    assert ht_mmap.inner.kv_capacity > 200
+    # After 1000 items, kv_capacity > 1000 (due to kv_grow_factor)
+    assert ht_mmap.inner.kv_capacity > 1000
     initial_size = os.path.getsize(path)
 
-    # shrink_to_fit should reduce file size to exactly kv_used
-    ht_mmap.inner.shrink_to_fit()
+    # write_header should now automatically call shrink_to_fit
     ht_mmap.write_header()
     
     shrunk_size = os.path.getsize(path)
     assert shrunk_size < initial_size
-    assert len(ht_mmap) == 200
+    assert len(ht_mmap) == 1000
 
 
 def test_mmap_new_file(tmp_path):
@@ -108,7 +107,7 @@ def test_mmap_new_file(tmp_path):
     path = str(tmp_path / "new_mmap.borghash")
     ht = HashTableNT(key_size=key_size, value_type=value_type, value_format=value_format, path=path)
     ht[key1] = value1
-    ht.write_header() # Initialize header for new file
+    ht.write_header()  # Initialize header for new file
     assert os.path.exists(path)
     
     # Check if it persists without explicit write()
