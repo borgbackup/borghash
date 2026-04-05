@@ -1,8 +1,8 @@
 """
 HashTable: low-level hash table mapping fully random bytes keys to bytes values.
            Key and value lengths can be chosen, but are fixed thereafter.
-           The keys and values are stored in arrays separate from the hashtable.
-           The hashtable only stores the 32-bit indices into the key/value arrays.
+           The keys and values are stored together in an array separate from the hashtable.
+           The hashtable only stores the 32-bit indices into the key/value array.
 """
 from __future__ import annotations
 from typing import BinaryIO, Iterator, Any
@@ -50,8 +50,8 @@ cdef class HashTable:
                  kv_grow_factor: float = 1.3) -> None:
         # the load of the ht (.table) shall be between 0.25 and 0.5, so it is fast and has few collisions.
         # it is cheap to have a low hash table load, because .table only stores uint32_t indices into the
-        # .keys and .values array.
-        # the keys/values arrays have bigger elements and are not hash tables, thus collisions and load
+        # .kv array.
+        # the .kv array has bigger elements and is not a hash table, thus collisions and load
         # factor are no concern there. the kv_grow_factor can be relatively small.
         if key_size < 4:
             raise ValueError("key_size must be specified and must be >= 4.")
@@ -71,13 +71,12 @@ cdef class HashTable:
         self.table = NULL
         self._resize_table(self.initial_capacity)
         # ^^^ hash table ^^^
-        # vvv kv arrays vvv
+        # vvv kv array vvv
         self.kv_grow_factor = kv_grow_factor
         self.kv_used = 0
-        self.keys = NULL
-        self.values = NULL
+        self.kv = NULL
         self._resize_kv(int(self.initial_capacity * self.max_load_factor))
-        # ^^^ kv arrays ^^^
+        # ^^^ kv array ^^^
         # vvv stats vvv
         self.stats_get = 0
         self.stats_set = 0
@@ -92,8 +91,7 @@ cdef class HashTable:
 
     def __del__(self) -> None:
         free(self.table)
-        free(self.keys)
-        free(self.values)
+        free(self.kv)
 
     def clear(self) -> None:
         """Empty the HashTable and start from scratch."""
@@ -122,7 +120,7 @@ cdef class HashTable:
         self.stats_lookup += 1
         while (kv_index := self.table[index]) != FREE_BUCKET:
             self.stats_linear += 1
-            if kv_index != TOMBSTONE_BUCKET and memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
+            if kv_index != TOMBSTONE_BUCKET and memcmp(self.kv + kv_index * (self.ksize + self.vsize), key_ptr, self.ksize) == 0:
                 if index_ptr:
                     index_ptr[0] = index
                 return 1  # found
@@ -142,7 +140,7 @@ cdef class HashTable:
         self.stats_set += 1
         if self._lookup_index(key_ptr, &index):
             kv_index = self.table[index]
-            memcpy(self.values + kv_index * self.vsize, value_ptr, self.vsize)
+            memcpy(self.kv + kv_index * (self.ksize + self.vsize) + self.ksize, value_ptr, self.vsize)
             return
 
         if self.kv_used >= self.kv_capacity:
@@ -154,8 +152,8 @@ cdef class HashTable:
             raise RuntimeError("KV array is full")
 
         kv_index = self.kv_used
-        memcpy(self.keys + kv_index * self.ksize, key_ptr, self.ksize)
-        memcpy(self.values + kv_index * self.vsize, value_ptr, self.vsize)
+        memcpy(self.kv + kv_index * (self.ksize + self.vsize), key_ptr, self.ksize)
+        memcpy(self.kv + kv_index * (self.ksize + self.vsize) + self.ksize, value_ptr, self.vsize)
         self.kv_used += 1
 
         self.used += 1
@@ -177,7 +175,7 @@ cdef class HashTable:
         self.stats_get += 1
         if self._lookup_index(<uint8_t*> key, &index):
             kv_index = self.table[index]
-            return self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
+            return self.kv[kv_index * (self.ksize + self.vsize) + self.ksize : kv_index * (self.ksize + self.vsize) + self.ksize + self.vsize]
         else:
             raise KeyError("Key not found")
 
@@ -191,8 +189,7 @@ cdef class HashTable:
         self.stats_del += 1
         if self._lookup_index(key_ptr, &index):
             kv_index = self.table[index]
-            memset(self.keys + kv_index * self.ksize, 0, self.ksize)
-            memset(self.values + kv_index * self.vsize, 0, self.vsize)
+            memset(self.kv + kv_index * (self.ksize + self.vsize), 0, self.ksize + self.vsize)
             self.table[index] = TOMBSTONE_BUCKET
             self.used -= 1
             self.tombstones += 1
@@ -233,8 +230,8 @@ cdef class HashTable:
         for i in range(self.capacity):
             kv_index = self.table[i]
             if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
-                key = self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
-                value = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
+                key = self.kv[kv_index * (self.ksize + self.vsize) : kv_index * (self.ksize + self.vsize) + self.ksize]
+                value = self.kv[kv_index * (self.ksize + self.vsize) + self.ksize : kv_index * (self.ksize + self.vsize) + self.ksize + self.vsize]
                 yield key, value
 
     cdef void _resize_table(self, size_t new_capacity):
@@ -250,7 +247,7 @@ cdef class HashTable:
         for i in range(current_capacity):
             kv_index = self.table[i]
             if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
-                index = self._get_index(self.keys + kv_index * self.ksize)
+                index = self._get_index(self.kv + kv_index * (self.ksize + self.vsize))
                 while new_table[index] != FREE_BUCKET:
                     index = (index + 1) % new_capacity
                 new_table[index] = kv_index
@@ -264,8 +261,7 @@ cdef class HashTable:
         cdef size_t capacity = min(new_capacity, <size_t> RESERVED - 1)
         self.stats_resize_kv += 1
         # realloc is already highly optimized (in Linux). By using mremap internally only the peak address space usage is "old size" + "new size", while the peak memory usage is only "new size".
-        self.keys = <uint8_t*> realloc(self.keys, capacity * self.ksize * sizeof(uint8_t))
-        self.values = <uint8_t*> realloc(self.values, capacity * self.vsize * sizeof(uint8_t))
+        self.kv = <uint8_t*> realloc(self.kv, capacity * (self.ksize + self.vsize) * sizeof(uint8_t))
         self.kv_capacity = <uint32_t> capacity
 
     def k_to_idx(self, key: bytes) -> int:
@@ -283,15 +279,15 @@ cdef class HashTable:
 
     def idx_to_k(self, idx: int) -> bytes:
         """
-        For a given index, return the key stored at that index in the keys array.
+        For a given index, return the key stored at that index in the kv array.
         This is the reverse of k_to_idx (e.g., 32-bit index -> 256-bit key).
         """
         cdef uint32_t kv_index = <uint32_t> idx
-        return self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
+        return self.kv[kv_index * (self.ksize + self.vsize) : kv_index * (self.ksize + self.vsize) + self.ksize]
 
     def kv_to_idx(self, key: bytes, value: bytes) -> int:
         """
-        Return the key's/value's index in the keys/values array (index is stable while in memory).
+        Return the key's/value's index in the kv array (index is stable while in memory).
         This can be used to "abbreviate" a known key/value pair (e.g., 256-bit key + 32-bit value -> 32-bit index).
         """
         if len(key) != self.ksize:
@@ -302,19 +298,19 @@ cdef class HashTable:
         cdef uint32_t kv_index
         if self._lookup_index(<uint8_t*> key, &index):
             kv_index = self.table[index]
-            value_found = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
+            value_found = self.kv[kv_index * (self.ksize + self.vsize) + self.ksize : kv_index * (self.ksize + self.vsize) + self.ksize + self.vsize]
             if value == value_found:
                 return kv_index
         raise KeyError("Key/Value not found")
 
     def idx_to_kv(self, idx: int) -> tuple[bytes, bytes]:
         """
-        For a given index, return the key/value stored at that index in the keys/values array.
+        For a given index, return the key/value stored at that index in the kv array.
         This is the reverse of kv_to_idx (e.g., 32-bit index -> 256-bit key + 32-bit value).
         """
         cdef uint32_t kv_index = <uint32_t> idx
-        key = self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
-        value = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
+        key = self.kv[kv_index * (self.ksize + self.vsize) : kv_index * (self.ksize + self.vsize) + self.ksize]
+        value = self.kv[kv_index * (self.ksize + self.vsize) + self.ksize : kv_index * (self.ksize + self.vsize) + self.ksize + self.vsize]
         return key, value
 
     @property

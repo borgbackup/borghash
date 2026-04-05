@@ -8,8 +8,7 @@ cdef class HashTable:
     cdef uint32_t* table
     cdef uint32_t kv_capacity, kv_used
     cdef float kv_grow_factor
-    cdef uint8_t* keys
-    cdef uint8_t* values
+    cdef uint8_t* kv
     cdef int stats_get, stats_set, stats_del, stats_iter, stats_lookup, stats_linear
     cdef int stats_resize_table, stats_resize_kv
 
