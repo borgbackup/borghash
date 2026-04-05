@@ -53,8 +53,8 @@ cdef class HashTable:
         # .keys and .values array.
         # the keys/values arrays have bigger elements and are not hash tables, thus collisions and load
         # factor are no concern there. the kv_grow_factor can be relatively small.
-        if not key_size:
-            raise ValueError("key_size must be specified and must be > 0.")
+        if key_size < 4:
+            raise ValueError("key_size must be specified and must be >= 4.")
         if not value_size:
             raise ValueError("value_size must be specified and must be > 0.")
         self.ksize = key_size
