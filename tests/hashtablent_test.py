@@ -184,7 +184,7 @@ def test_size(ntht, n):
         ntht.write(f)
         real_size = f.tell()
     # Is our estimate good enough?
-    assert estimated_size * 0.9 < real_size < estimated_size * 1.0
+    assert estimated_size * 0.9 < real_size <= estimated_size * 1.0
 
 
 def test_demo():

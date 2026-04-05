@@ -10,6 +10,10 @@ from typing import BinaryIO, Iterator, Any
 from libc.stdlib cimport malloc, free, realloc
 from libc.string cimport memcpy, memset, memcmp
 from libc.stdint cimport uint8_t, uint32_t
+from libc.errno cimport errno
+from posix.unistd cimport close, ftruncate, lseek, SEEK_END
+from posix.fcntl cimport open as c_open, O_RDWR, O_CREAT
+from posix.mman cimport mmap, munmap, MAP_SHARED, PROT_READ, PROT_WRITE
 
 from collections.abc import Mapping
 
@@ -47,7 +51,8 @@ cdef class HashTable:
                  key_size: int = 0, value_size: int = 0, capacity: int = MIN_CAPACITY,
                  max_load_factor: float = 0.5, min_load_factor: float = 0.10,
                  shrink_factor: float = 0.4, grow_factor: float = 2.0,
-                 kv_grow_factor: float = 1.3) -> None:
+                 kv_grow_factor: float = 1.3,
+                 path: str = None, kv_offset: int = 0) -> None:
         # the load of the ht (.table) shall be between 0.25 and 0.5, so it is fast and has few collisions.
         # it is cheap to have a low hash table load, because .table only stores uint32_t indices into the
         # .kv array.
@@ -59,6 +64,15 @@ cdef class HashTable:
             raise ValueError("value_size must be specified and must be > 0.")
         self.ksize = key_size
         self.vsize = value_size
+        # vvv mmap vvv
+        self.fd = -1
+        self.mmap_size = 0
+        self.kv_offset = kv_offset
+        if path:
+            self.fd = c_open(path.encode('utf-8'), O_RDWR | O_CREAT, 0o644)
+            if self.fd == -1:
+                raise OSError(errno, f"Could not open {path}")
+        # ^^^ mmap ^^^
         # vvv hash table vvv
         self.max_load_factor = max_load_factor
         self.min_load_factor = min_load_factor
@@ -75,7 +89,21 @@ cdef class HashTable:
         self.kv_grow_factor = kv_grow_factor
         self.kv_used = 0
         self.kv = NULL
-        self._resize_kv(int(self.initial_capacity * self.max_load_factor))
+        if self.fd != -1:
+            # For mmap, we determine current size and capacity from file size.
+            file_size = lseek(self.fd, 0, SEEK_END)
+            if file_size > self.kv_offset:  # kv array is not empty
+                self.mmap_size = file_size
+                # map the full file, starting from offset 0
+                new_kv = mmap(NULL, self.mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, self.fd, 0)
+                if new_kv == <void*> -1:
+                    raise OSError(errno, "mmap failed")
+                self.kv = <uint8_t*> new_kv + self.kv_offset
+                self.kv_capacity = <uint32_t>((self.mmap_size - self.kv_offset) // (self.ksize + self.vsize))
+            else:
+                self._resize_kv(int(self.initial_capacity * self.max_load_factor))
+        else:
+            self._resize_kv(int(self.initial_capacity * self.max_load_factor))
         # ^^^ kv array ^^^
         # vvv stats vvv
         self.stats_get = 0
@@ -91,7 +119,12 @@ cdef class HashTable:
 
     def __del__(self) -> None:
         free(self.table)
-        free(self.kv)
+        if self.fd != -1:
+            if self.kv != NULL:
+                munmap(self.kv - self.kv_offset, self.mmap_size)
+            close(self.fd)
+        else:
+            free(self.kv)
 
     def clear(self) -> None:
         """Empty the HashTable and start from scratch."""
@@ -144,7 +177,8 @@ cdef class HashTable:
             return
 
         if self.kv_used >= self.kv_capacity:
-            self._resize_kv(int(self.kv_capacity * self.kv_grow_factor))
+            # "+ 1" ensures growth even for very small or 0 capacity.
+            self._resize_kv(int(self.kv_capacity * self.kv_grow_factor + 1))
         if self.kv_used >= self.kv_capacity:
             # Should never happen. See "RESERVED" constant - we allow almost 4Gi kv entries.
             # For a typical 256-bit key and a small 32-bit value that would already consume 176GiB+
@@ -234,6 +268,17 @@ cdef class HashTable:
                 value = self.kv[kv_index * (self.ksize + self.vsize) + self.ksize : kv_index * (self.ksize + self.vsize) + self.ksize + self.vsize]
                 yield key, value
 
+    cpdef void update_table_only(self, bytes key, uint32_t kv_index):
+        cdef size_t index
+        self._lookup_index(<uint8_t*> key, &index)
+        # index is either a bucket containing the key (if it already existed)
+        # or it is the first free/tombstone bucket in the probe sequence.
+        if self.table[index] == FREE_BUCKET or self.table[index] == TOMBSTONE_BUCKET:
+            self.used += 1
+        self.table[index] = kv_index
+        if self.used + self.tombstones > self.capacity * self.max_load_factor:
+            self._resize_table(int(self.capacity * self.grow_factor))
+
     cdef void _resize_table(self, size_t new_capacity):
         cdef size_t i, index
         cdef uint32_t kv_index
@@ -259,10 +304,40 @@ cdef class HashTable:
     cdef void _resize_kv(self, size_t new_capacity):
         # We must never use kv indices >= RESERVED; thus, we'll never need more capacity either.
         cdef size_t capacity = min(new_capacity, <size_t> RESERVED - 1)
+        cdef size_t new_mmap_size
+        cdef void* new_kv
         self.stats_resize_kv += 1
-        # realloc is already highly optimized (in Linux). By using mremap internally only the peak address space usage is "old size" + "new size", while the peak memory usage is only "new size".
-        self.kv = <uint8_t*> realloc(self.kv, capacity * (self.ksize + self.vsize) * sizeof(uint8_t))
+        if self.fd != -1:
+            new_mmap_size = self.kv_offset + capacity * (self.ksize + self.vsize) * sizeof(uint8_t)
+            if self.kv != NULL:
+                # Don't shrink automatically during resize if we already have space.
+                # This prevents truncating an existing file's data when it's opened
+                # with a smaller initial_capacity than the file already contains.
+                # HOWEVER, if capacity is kv_used, we might be in shrink_to_fit.
+                # Let's allow shrinking if capacity < self.kv_capacity.
+                if new_mmap_size <= self.mmap_size and capacity >= self.kv_capacity:
+                    return
+                munmap(self.kv - self.kv_offset, self.mmap_size)
+            if ftruncate(self.fd, new_mmap_size) == -1:
+                raise OSError(errno, "ftruncate failed")
+            new_kv = mmap(NULL, new_mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, self.fd, 0)
+            if new_kv == <void*> -1:
+                raise OSError(errno, "mmap failed")
+            self.kv = <uint8_t*> new_kv + self.kv_offset
+            self.mmap_size = new_mmap_size
+        else:
+            # realloc is already highly optimized (in Linux). By using mremap internally, only the peak address space usage is "old size" + "new size", while the peak memory usage is only "new size".
+            self.kv = <uint8_t*> realloc(self.kv, capacity * (self.ksize + self.vsize) * sizeof(uint8_t))
         self.kv_capacity = <uint32_t> capacity
+
+    def shrink_to_fit(self) -> None:
+        """Shrink the KV array and the file to the actually used size."""
+        self._resize_kv(self.kv_used)
+        if self.fd != -1:
+            # _resize_kv already calls ftruncate to new_mmap_size,
+            # which is kv_offset + capacity * entry_size.
+            # Here capacity is self.kv_used.
+            pass
 
     def k_to_idx(self, key: bytes) -> int:
         """
@@ -283,6 +358,8 @@ cdef class HashTable:
         This is the reverse of k_to_idx (e.g., 32-bit index -> 256-bit key).
         """
         cdef uint32_t kv_index = <uint32_t> idx
+        if kv_index >= self.kv_used:
+             raise KeyError(f"Index {kv_index} out of range (kv_used={self.kv_used})")
         return self.kv[kv_index * (self.ksize + self.vsize) : kv_index * (self.ksize + self.vsize) + self.ksize]
 
     def kv_to_idx(self, key: bytes, value: bytes) -> int:
