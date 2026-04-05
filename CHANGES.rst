@@ -1,6 +1,11 @@
 Changelog
 =========
 
+Version 0.1.2 (unreleased)
+--------------------------
+
+- Require ``key_size >= 4`` to avoid out-of-bounds reads in ``_get_index``, #42.
+
 Version 0.1.1 (2026-02-09)
 --------------------------
 

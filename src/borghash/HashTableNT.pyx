@@ -25,8 +25,8 @@ cdef class HashTableNT:
     def __init__(self, items=None, *,
                  key_size: int, value_type: Any, value_format: Any,
                  capacity: int = MIN_CAPACITY, byte_order="little") -> None:
-        if not isinstance(key_size, int) or not key_size > 0:
-            raise ValueError("key_size must be an integer and > 0.")
+        if not isinstance(key_size, int) or not key_size >= 4:
+            raise ValueError("key_size must be an integer and >= 4.")
         if type(value_type) is not type:
             raise TypeError("value_type must be a namedtuple type.")
         if not isinstance(value_format, tuple):
