@@ -9,6 +9,7 @@ cdef class HashTable:
     cdef public uint32_t kv_capacity, kv_used
     cdef float kv_grow_factor
     cdef uint8_t* kv
+    cdef uint8_t* header
     cdef int fd
     cdef size_t mmap_size
     cdef uint32_t kv_offset

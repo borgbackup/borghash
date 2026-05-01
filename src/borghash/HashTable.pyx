@@ -89,17 +89,22 @@ cdef class HashTable:
         self.kv_grow_factor = kv_grow_factor
         self.kv_used = 0
         self.kv = NULL
+        self.header = NULL
         if self.fd != -1:
             # For mmap, we determine current size and capacity from file size.
             file_size = lseek(self.fd, 0, SEEK_END)
-            if file_size > self.kv_offset:  # kv array is not empty
+            if file_size > 0:
                 self.mmap_size = file_size
-                # map the full file, starting from offset 0
                 new_kv = mmap(NULL, self.mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, self.fd, 0)
                 if new_kv == <void*> -1:
                     raise OSError(errno, "mmap failed")
-                self.kv = <uint8_t*> new_kv + self.kv_offset
-                self.kv_capacity = <uint32_t>((self.mmap_size - self.kv_offset) // (self.ksize + self.vsize))
+                self.header = <uint8_t*> new_kv
+                if self.kv_offset > 0:
+                    self.kv = <uint8_t*> new_kv + self.kv_offset
+                    self.kv_capacity = <uint32_t>((self.mmap_size - self.kv_offset) // (self.ksize + self.vsize))
+                else:
+                    self.kv = NULL
+                    self.kv_capacity = 0
             else:
                 self._resize_kv(int(self.initial_capacity * self.max_load_factor))
         else:
@@ -121,8 +126,9 @@ cdef class HashTable:
         free(self.table)
         self.table = NULL
         if self.fd != -1:
-            if self.kv != NULL:
-                munmap(self.kv - self.kv_offset, self.mmap_size)
+            if self.header != NULL:
+                munmap(self.header, self.mmap_size)
+                self.header = NULL
                 self.kv = NULL
             close(self.fd)
             self.fd = -1
@@ -335,24 +341,25 @@ cdef class HashTable:
         # We must never use kv indices >= RESERVED; thus, we'll never need more capacity either.
         cdef size_t capacity = min(new_capacity, <size_t> RESERVED - 1)
         cdef size_t new_mmap_size
-        cdef void* new_kv
+        cdef void* new_ptr
         self.stats_resize_kv += 1
         if self.fd != -1:
             new_mmap_size = self.kv_offset + capacity * (self.ksize + self.vsize) * sizeof(uint8_t)
-            if self.kv != NULL:
+            if self.header != NULL:
                 # Don't shrink automatically during resize if we already have space.
                 # This prevents truncating an existing file's data when it's opened
                 # with a smaller initial_capacity than the file already contains.
                 # HOWEVER, we MUST shrink if capacity < self.kv_capacity (e.g. shrink_to_fit).
                 if new_mmap_size <= self.mmap_size and capacity >= self.kv_capacity:
                     return
-                munmap(self.kv - self.kv_offset, self.mmap_size)
+                munmap(self.header, self.mmap_size)
             if ftruncate(self.fd, new_mmap_size) == -1:
                 raise OSError(errno, "ftruncate failed")
-            new_kv = mmap(NULL, new_mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, self.fd, 0)
-            if new_kv == <void*> -1:
+            new_ptr = mmap(NULL, new_mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, self.fd, 0)
+            if new_ptr == <void*> -1:
                 raise OSError(errno, "mmap failed")
-            self.kv = <uint8_t*> new_kv + self.kv_offset
+            self.header = <uint8_t*> new_ptr
+            self.kv = <uint8_t*> new_ptr + self.kv_offset
             self.mmap_size = new_mmap_size
         else:
             # realloc is already highly optimized (in Linux). By using mremap internally, only the peak address space usage is "old size" + "new size", while the peak memory usage is only "new size".

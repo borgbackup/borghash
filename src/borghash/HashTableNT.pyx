@@ -11,13 +11,15 @@ import json
 import struct
 
 from .HashTable import HashTable, MIN_CAPACITY, _fill
+from libc.stdint cimport uint8_t
 from posix.types cimport off_t
 from posix.unistd cimport lseek, SEEK_SET, SEEK_CUR, write as c_write
+from libc.string cimport memcpy, memset
 
 MAGIC = b"BORGHASH"
 assert len(MAGIC) == 8
 VERSION = 1  # version of the on-disk (serialized) format produced by .write().
-HEADER_FMT = "<8sII"  # magic, version, meta length
+HEADER_FMT = "<8sIIIII"  # magic, version, meta length, capacity, used, kv_used
 ALIGNMENT = 64  # usual length of cache line
 
 BYTE_ORDER = dict(big=">", little="<", network="!", native="=")  # struct format chars
@@ -29,6 +31,7 @@ cdef class HashTableNT:
                  int key_size=0, value_type=None, value_format=None,
                  int capacity = MIN_CAPACITY, str byte_order="little",
                  str path = None, int kv_offset = 4096) -> None:
+        cdef int valid_count
         if not isinstance(key_size, int) or not key_size >= 4:
             raise ValueError("key_size must be an integer and >= 4.")
         if type(value_type) is not type:
@@ -49,6 +52,34 @@ cdef class HashTableNT:
         self.value_size = self.value_struct.size
         self.inner = HashTable(key_size=self.key_size, value_size=self.value_size, capacity=capacity,
                                path=path, kv_offset=kv_offset)
+        if path:
+            # Check if file already exists and has a header
+            header_size = struct.calcsize(HEADER_FMT)
+            if self.inner.mmap_size >= header_size:
+                header_bytes = (<char*>self.inner.header)[:header_size]
+                magic, version, meta_size, capacity, used, kv_used = struct.unpack(HEADER_FMT, header_bytes)
+                if magic == MAGIC:
+                    # If the file already has a header, it means it's an existing table.
+                    # We MUST use the capacity from the header to correctly restore the hash table.
+                    # Also, reset used to 0 as update_table_only will increment it.
+                    self.inner.kv_used = kv_used
+                    (<HashTable>self.inner).used = 0
+                    if capacity != self.inner.capacity:
+                         self.inner._resize_table(capacity)
+
+                    # This is an existing file with a header, let's restore the state
+                    # Populate hash table
+                    valid_count = 0
+                    for i in range(kv_used):
+                        key = self.inner.idx_to_k(i)
+                        # A deleted slot MUST have a zero key. idx_to_k returns the raw bytes.
+                        if any(key):
+                            self.inner.update_table_only(key, i)
+                            valid_count += 1
+
+                    # After populating, self.inner.used should match 'used' from header
+                    assert self.inner.used == used
+                    assert valid_count == used
         _fill(self, items)
 
     def clear(self) -> None:
@@ -185,20 +216,20 @@ cdef class HashTableNT:
             'value_format_name': self.value_format.__class__.__name__,
             'value_format_fields': self.value_format._fields,
             'value_format': self.value_format,
-            'capacity': self.inner.capacity,
-            'used': self.inner.used,  # count of valid keys / values
-            'kv_used': self.inner.kv_used, # count of slots in the kv array
         }
         meta_bytes = json.dumps(meta).encode("utf-8")
         header_size = struct.calcsize(HEADER_FMT)
         # Calculate kv_offset based on current meta_bytes length, then meta_size is everything in between.
         kv_offset = (header_size + len(meta_bytes) + ALIGNMENT - 1) // ALIGNMENT * ALIGNMENT
         meta_size = kv_offset - header_size
-        header_bytes = struct.pack(HEADER_FMT, MAGIC, VERSION, meta_size)
+
+        header_bytes = struct.pack(HEADER_FMT, MAGIC, VERSION, meta_size,
+                                   self.inner.capacity, self.inner.used, self.inner.used)
         fd.write(header_bytes)
         fd.write(meta_bytes)
         # Pad with zeros until kv_offset
         fd.write(b'\x00' * (meta_size - len(meta_bytes)))
+
         count = 0
         for i in range(self.inner.kv_used):
              try:
@@ -224,7 +255,7 @@ cdef class HashTableNT:
         header_bytes = fd.read(header_size)
         if len(header_bytes) < header_size:
             raise ValueError("Invalid file, file is too short.")
-        magic, version, meta_size = struct.unpack(HEADER_FMT, header_bytes)
+        magic, version, meta_size, capacity, used, kv_used = struct.unpack(HEADER_FMT, header_bytes)
         if magic != MAGIC:
             # Try old header format? No, we broke compatibility on purpose.
             raise ValueError("Invalid file, magic %s not found." % MAGIC.decode())
@@ -238,9 +269,8 @@ cdef class HashTableNT:
         value_format_t = namedtuple(meta['value_format_name'], meta['value_format_fields'])
         value_format = value_format_t(*meta['value_format'])
         ht = cls(key_size=meta['key_size'], value_format=value_format, value_type=value_type,
-                 capacity=meta['capacity'], byte_order=meta['byte_order'])
+                 capacity=capacity, byte_order=meta['byte_order'])
         ksize, vsize = meta['key_size'], meta['value_size']
-        kv_used = meta.get('kv_used', meta['used'])
         for i in range(kv_used):
             key = fd.read(ksize)
             value = fd.read(vsize)
@@ -252,12 +282,15 @@ cdef class HashTableNT:
     @classmethod
     def open_mmap(cls, path: str, value_type: Any = None, value_format: Any = None):
         """Open an existing borghash file in mmap mode."""
+        # We can just use the constructor, it already handles existing files with headers
+        # but we need to extract meta to get value_type/format if not provided.
+        # This is a bit redundant but stays compatible with the signature.
         with open(path, 'rb') as fd:
             header_size = struct.calcsize(HEADER_FMT)
             header_bytes = fd.read(header_size)
             if len(header_bytes) < header_size:
                 raise ValueError("Invalid file, file is too short.")
-            magic, version, meta_size = struct.unpack(HEADER_FMT, header_bytes)
+            magic, version, meta_size, capacity, used, kv_used = struct.unpack(HEADER_FMT, header_bytes)
             if magic != MAGIC:
                 raise ValueError("Invalid file, magic %s not found." % MAGIC.decode())
             if version != VERSION:
@@ -273,25 +306,10 @@ cdef class HashTableNT:
         if value_format is None:
             value_format_t = namedtuple(meta['value_format_name'], meta['value_format_fields'])
             value_format = value_format_t(*meta['value_format'])
-            
-        ht = cls(key_size=meta['key_size'], value_format=value_format, value_type=value_type,
-                 capacity=meta['capacity'], byte_order=meta['byte_order'],
-                 path=path, kv_offset=kv_offset)
 
-        # In mmap mode, we must populate the hash table (self.inner.table) from the KV array.
-        # self.inner.kv is already mapped.
-        ksize, vsize = meta['key_size'], meta['value_size']
-        kv_used = meta.get('kv_used', meta['used']) # fallback for older versions/standard write()
-        ht.inner.kv_used = kv_used
-        for i in range(kv_used):
-            try:
-                 key = ht.inner.idx_to_k(i)
-                 # A zero key means it's a deleted slot or uninitialized
-                 if any(key):
-                      ht.inner.update_table_only(key, i)
-            except KeyError:
-                 continue
-        return ht
+        return cls(key_size=meta['key_size'], value_format=value_format, value_type=value_type,
+                   capacity=capacity, byte_order=meta['byte_order'],
+                   path=path, kv_offset=kv_offset)
 
     def size(self) -> int:
         """
@@ -309,20 +327,19 @@ cdef class HashTableNT:
              raise RuntimeError("Not a memory-mapped HashTableNT (no path/fd).")
 
         # Always shrink to fit before writing header
+        # BUT only if we are in mmap mode and it was a resize that led to over-capacity.
         self.inner.shrink_to_fit()
 
-        # Save current position
-        cdef off_t current_pos = lseek(self.inner.fd, 0, SEEK_CUR)
-        # Seek to start
-        lseek(self.inner.fd, 0, SEEK_SET)
-        
+        header_size = struct.calcsize(HEADER_FMT)
+
+        # If the file is new or was just created, it might not even have space for the meta.
+        # We should ensure the metadata is also written if it's not already there.
+        # For a brand new file, kv_offset might be the initial 4096.
+
         meta = {
             'key_size': self.key_size,
             'value_size': self.value_size,
             'byte_order': self.byte_order,
-            'used': self.inner.used,
-            'kv_used': self.inner.kv_used,
-            'capacity': self.inner.capacity,
             'value_type_name': self.value_type.__name__,
             'value_type_fields': self.value_type._fields,
             'value_format_name': self.value_format.__class__.__name__,
@@ -330,26 +347,31 @@ cdef class HashTableNT:
             'value_format': self.value_format,
         }
         meta_bytes = json.dumps(meta).encode("utf-8")
-        header_size = struct.calcsize(HEADER_FMT)
         kv_offset = (header_size + len(meta_bytes) + ALIGNMENT - 1) // ALIGNMENT * ALIGNMENT
-        if kv_offset != self.inner.kv_offset:
-             # This is a bit tricky, if we change meta size, we'd need to shift the KV array.
-             # For now, let's just ensure we don't exceed the original kv_offset.
-             if kv_offset > self.inner.kv_offset:
-                  raise RuntimeError("Metadata too large for the current kv_offset.")
-             kv_offset = self.inner.kv_offset # stay at the original offset
-             
-        meta_size = kv_offset - header_size
-        header_bytes = struct.pack(HEADER_FMT, MAGIC, VERSION, meta_size)
-        
-        # We need a file object for write() or use os.write
-        # Since we're in Cython, we can use POSIX write()
-        c_write(self.inner.fd, <char*>header_bytes, len(header_bytes))
-        c_write(self.inner.fd, <char*>meta_bytes, len(meta_bytes))
+        if kv_offset > self.inner.kv_offset:
+             # This can happen if user didn't provide enough kv_offset initially for the metadata.
+             # In __init__, default kv_offset is 4096 which is usually plenty.
+             raise RuntimeError(f"Metadata too large ({len(meta_bytes)} bytes) for current kv_offset ({self.inner.kv_offset}).")
+
+        # We always use the self.inner.kv_offset that was established.
+        meta_size = self.inner.kv_offset - header_size
+        header_bytes = struct.pack(HEADER_FMT, MAGIC, VERSION, meta_size,
+                                   self.inner.capacity, self.inner.used, self.inner.kv_used)
+
+        # Ensure mmap is large enough to hold at least the header and meta
+        if self.inner.mmap_size < self.inner.kv_offset:
+             self.inner._resize_kv(0) # this will grow it to at least kv_offset
+
+        cdef HashTable inner = <HashTable>self.inner
+        cdef uint8_t* header = inner.header
+        cdef char* header_ptr = <char*>header_bytes
+        cdef char* meta_ptr = <char*>meta_bytes
+        cdef size_t h_size = header_size
+        # Update the header in the mmapped memory
+        memcpy(header, header_ptr, h_size)
+        # Also write/update the meta bytes if they are not there or to be sure.
+        memcpy(header + h_size, meta_ptr, len(meta_bytes))
+        # Zero out padding between meta and KV array
         padding = meta_size - len(meta_bytes)
         if padding > 0:
-             zeros = b'\x00' * padding
-             c_write(self.inner.fd, <char*>zeros, padding)
-        
-        # Restore position
-        lseek(self.inner.fd, current_pos, SEEK_SET)
+             memset(header + h_size + len(meta_bytes), 0, padding)

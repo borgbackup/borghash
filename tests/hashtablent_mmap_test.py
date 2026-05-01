@@ -36,14 +36,14 @@ def test_mmap_persistence(tmp_path):
     ht = HashTableNT(key_size=key_size, value_type=value_type, value_format=value_format)
     ht[key1] = value1
     ht.write(path)
-    
+
     # Open mmap, modify, and close
     ht_mmap = HashTableNT.open_mmap(path)
     ht_mmap[key2] = value2
     del ht_mmap[key1]
     # Update header/metadata in the file
     ht_mmap.write_header()
-    
+
     # Re-open normally to verify
     ht_read = HashTableNT.read(path)
     assert key1 not in ht_read
@@ -56,18 +56,18 @@ def test_mmap_resize(tmp_path):
     ht = HashTableNT(key_size=key_size, value_type=value_type, value_format=value_format, capacity=100)
     ht[key1] = value1
     ht.write(path)
-    
+
     ht_mmap = HashTableNT.open_mmap(path)
     # Add many items to trigger KV and table resize
     for i in range(200):
         key = H2(i)
         ht_mmap[key] = value_type(i, i+1, i+2)
-    
+
     ht_mmap.write_header()  # update used count in metadata
-    
+
     assert len(ht_mmap) == 201
     assert ht_mmap[key1] == value1
-    
+
     # Close and reopen to ensure resized file is valid
     ht_reopened = HashTableNT.open_mmap(path)
     assert len(ht_reopened) == 201
@@ -84,19 +84,19 @@ def test_mmap_shrink_to_fit(tmp_path):
     for i in range(100):
         ht[H2(i)] = value_type(i, 0, 0)
     ht.write(path)
-    
+
     ht_mmap = HashTableNT.open_mmap(path)
     # Add enough items to trigger KV growth
     for i in range(100, 1000):
          ht_mmap[H2(i)] = value_type(i, 0, 0)
-    
+
     # After 1000 items, kv_capacity > 1000 (due to kv_grow_factor)
     assert ht_mmap.inner.kv_capacity > 1000
     initial_size = os.path.getsize(path)
 
     # write_header should now automatically call shrink_to_fit
     ht_mmap.write_header()
-    
+
     shrunk_size = os.path.getsize(path)
     assert shrunk_size < initial_size
     assert len(ht_mmap) == 1000
@@ -109,7 +109,7 @@ def test_mmap_new_file(tmp_path):
     ht[key1] = value1
     ht.write_header()  # Initialize header for new file
     assert os.path.exists(path)
-    
+
     # Check if it persists without explicit write()
     ht2 = HashTableNT.open_mmap(path)
     assert ht2[key1] == value1
@@ -146,7 +146,10 @@ def test_mmap_delete_persistence(tmp_path):
     assert len(ht2) == 50
 
     # verification of entries
-    for i in range(50, 100):
+    # 0..24 were NOT deleted, 25..74 WERE deleted, 75..99 were NOT deleted
+    for i in range(25):
         assert ht2[H2(i)] == value_type(i, i, i)
-    for i in range(50):
+    for i in range(25, 75):
         assert H2(i) not in ht2
+    for i in range(75, 100):
+        assert ht2[H2(i)] == value_type(i, i, i)
