@@ -1,9 +1,14 @@
 Changelog
 =========
 
-Version 0.1.2 (unreleased)
+Version 0.2.0 (unreleased)
 --------------------------
 
+- ``HashTable.items()`` / ``HashTableNT.items()``: add optional ``prefix_bits`` /
+  ``prefix`` arguments to iterate only over the items whose key starts with the
+  given bit prefix. As the keys are random bytes, this partitions the items into
+  ``2 ** prefix_bits`` roughly equally sized, disjoint sets, e.g. to process a
+  huge hash table in batches with a small memory footprint, #49.
 - Require ``key_size >= 4`` to avoid out-of-bounds reads in ``_get_index``, #42.
 
 Version 0.1.1 (2026-02-09)
