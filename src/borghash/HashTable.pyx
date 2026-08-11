@@ -226,13 +226,39 @@ cdef class HashTable:
             del self[key]
             return value
 
-    def items(self) -> Iterator[tuple[bytes, bytes]]:
+    def items(self, *, prefix_bits: int = 0, prefix: int = 0) -> Iterator[tuple[bytes, bytes]]:
+        """
+        Iterate over items, optionally only over items whose key starts with the given bit prefix.
+
+        prefix_bits: number of leading key bits to compare, 0..32 (0 means: no filtering).
+        prefix: expected value of these leading key bits, given in the integer's low bits,
+                thus: 0 <= prefix < 2 ** prefix_bits.
+
+        As the keys are expected to be random bytes, this partitions the keys into
+        2 ** prefix_bits roughly equally sized, disjoint sets, while only creating
+        bytes objects for the matching keys/values. As the prefix compares the keys'
+        leading bits, each set is a contiguous range of the sorted key space.
+        """
+        if not 0 <= prefix_bits <= 32:
+            raise ValueError("prefix_bits must be in range 0..32.")
+        if not 0 <= prefix < (1 << prefix_bits):
+            raise ValueError("prefix must be in range 0..(2 ** prefix_bits - 1).")
         cdef size_t i
         cdef uint32_t kv_index
+        cdef uint8_t* key_ptr
+        cdef uint32_t key32
+        cdef int shift = 32 - prefix_bits
+        cdef uint32_t wanted = <uint32_t> prefix
+        cdef bint filtering = prefix_bits > 0
         self.stats_iter += 1
         for i in range(self.capacity):
             kv_index = self.table[i]
             if kv_index not in (FREE_BUCKET, TOMBSTONE_BUCKET):
+                if filtering:
+                    key_ptr = self.keys + kv_index * self.ksize
+                    key32 = (key_ptr[0] << 24) | (key_ptr[1] << 16) | (key_ptr[2] << 8) | key_ptr[3]
+                    if (key32 >> shift) != wanted:
+                        continue
                 key = self.keys[kv_index * self.ksize:(kv_index + 1) * self.ksize]
                 value = self.values[kv_index * self.vsize:(kv_index + 1) * self.vsize]
                 yield key, value

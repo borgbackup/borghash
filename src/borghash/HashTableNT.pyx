@@ -90,8 +90,13 @@ cdef class HashTableNT:
         self._check_key(key)
         return key in self.inner
 
-    def items(self) -> Iterator[tuple[bytes, Any]]:
-        for key, binary_value in self.inner.items():
+    def items(self, *, prefix_bits: int = 0, prefix: int = 0) -> Iterator[tuple[bytes, Any]]:
+        """
+        Iterate over items, optionally only over items whose key starts with the given bit prefix.
+
+        See HashTable.items for the prefix_bits / prefix semantics.
+        """
+        for key, binary_value in self.inner.items(prefix_bits=prefix_bits, prefix=prefix):
             yield (key, self._to_namedtuple_value(binary_value))
 
     def __len__(self) -> int:

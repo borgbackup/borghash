@@ -68,6 +68,48 @@ def test_items(ht12):
     assert (key2, value2) in items
 
 
+@pytest.mark.parametrize("prefix_bits", [1, 2, 3, 8, 9, 32])
+def test_items_prefix(ht, prefix_bits):
+    # pseudo-random keys, so (for small prefix_bits) all partitions should get some keys
+    expected = {}
+    for x in range(1000):
+        key = H2(x)
+        value = key[:4]
+        ht[key] = value
+        prefix = int.from_bytes(key[:4], "big") >> (32 - prefix_bits)
+        expected.setdefault(prefix, set()).add((key, value))
+    # only iterate over the actually occupied partitions (2 ** 32 would take a while)...
+    collected = []
+    for prefix in expected:
+        items = set(ht.items(prefix_bits=prefix_bits, prefix=prefix))
+        assert items == expected[prefix]
+        collected.extend(items)
+    # together, the occupied partitions have everything, exactly once:
+    assert len(collected) == len(set(collected)) == 1000
+    # ... but an unoccupied partition (if any) must yield nothing:
+    unoccupied = next((p for p in range(2 ** prefix_bits) if p not in expected), None)
+    if unoccupied is not None:
+        assert list(ht.items(prefix_bits=prefix_bits, prefix=unoccupied)) == []
+
+
+def test_items_prefix_zero_bits(ht12):
+    # prefix_bits=0 means: no filtering
+    assert set(ht12.items(prefix_bits=0, prefix=0)) == set(ht12.items())
+
+
+def test_items_prefix_validation(ht12):
+    with pytest.raises(ValueError):
+        list(ht12.items(prefix_bits=-1))
+    with pytest.raises(ValueError):
+        list(ht12.items(prefix_bits=33))
+    with pytest.raises(ValueError):
+        list(ht12.items(prefix_bits=0, prefix=1))
+    with pytest.raises(ValueError):
+        list(ht12.items(prefix_bits=2, prefix=4))
+    with pytest.raises(ValueError):
+        list(ht12.items(prefix_bits=2, prefix=-1))
+
+
 def test_len(ht12):
     assert len(ht12) == 2
 

@@ -62,6 +62,20 @@ def test_items(ntht12):
     assert (key2, value2) in items
 
 
+def test_items_prefix(ntht):
+    prefix_bits = 4
+    expected = {}
+    for x in range(100):
+        key = H2(x)
+        value = value_type(x, x + 1, x + 2)
+        ntht[key] = value
+        prefix = key[0] >> (8 - prefix_bits)
+        expected.setdefault(prefix, set()).add((key, value))
+    for prefix in range(2 ** prefix_bits):
+        items = set(ntht.items(prefix_bits=prefix_bits, prefix=prefix))
+        assert items == expected.get(prefix, set())
+
+
 def test_len(ntht12):
     assert len(ntht12) == 2
 
