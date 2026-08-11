@@ -1,15 +1,18 @@
 Changelog
 =========
 
-Version 0.2.0 (unreleased)
+Version 0.2.0 (2026-08-11)
 --------------------------
 
 - ``HashTable.items()`` / ``HashTableNT.items()``: add optional ``prefix_bits`` /
-  ``prefix`` arguments to iterate only over the items whose key starts with the
+  ``prefix`` arguments to iterate over only the items whose keys start with the
   given bit prefix. As the keys are random bytes, this partitions the items into
-  ``2 ** prefix_bits`` roughly equally sized, disjoint sets, e.g. to process a
-  huge hash table in batches with a small memory footprint, #49.
+  ``2 ** prefix_bits`` roughly equally sized, disjoint sets, so a huge hash table
+  can be processed in batches with a small memory footprint, #49.
 - Require ``key_size >= 4`` to avoid out-of-bounds reads in ``_get_index``, #42.
+- Add support for Python 3.15, remove 3.10.
+- Cythonize with the latest Cython release.
+
 
 Version 0.1.1 (2026-02-09)
 --------------------------
