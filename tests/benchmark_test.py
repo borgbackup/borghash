@@ -9,6 +9,9 @@ import pytest
 from borghash import HashTable, HashTableNT
 from .hashtable_test import H2
 
+import tempfile
+import os
+
 VALUE_TYPE = namedtuple("value_type", "value")
 VALUE_FMT_TYPE = namedtuple("value_format", "value")
 VALUE_FMT = VALUE_FMT_TYPE("I")
@@ -41,7 +44,22 @@ def pd():  # Python dict
     return dict()
 
 
-TEST_PARAMS = [(bh, False), (bhnt, True), (pd, False), (pd, True)]
+def bhmmap():  # BorgHash HashTableNT with mmap
+    fd, path = tempfile.mkstemp(suffix=".borghash")
+    os.close(fd)
+    
+    class MappedHashTableNT(HashTableNT):
+        def __del__(self):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    ht = MappedHashTableNT(key_size=KEY_SIZE, value_type=VALUE_TYPE, value_format=VALUE_FMT, path=path)
+    return ht
+
+
+TEST_PARAMS = [(bh, False), (bhnt, True), (pd, False), (pd, True), (bhmmap, True)]
 
 
 def setup(ht_class, items, fill=False, nt=False):

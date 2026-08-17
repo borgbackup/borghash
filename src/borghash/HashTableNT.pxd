@@ -1,8 +1,10 @@
+from .HashTable cimport HashTable
+
 cdef class HashTableNT:
-    cdef int key_size
-    cdef object byte_order
-    cdef object value_type
-    cdef object value_format
-    cdef object value_struct
-    cdef int value_size
-    cdef object inner
+    cdef public int key_size
+    cdef public object byte_order
+    cdef public object value_type
+    cdef public object value_format
+    cdef public object value_struct
+    cdef public int value_size
+    cdef public HashTable inner
