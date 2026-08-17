@@ -47,12 +47,15 @@ cdef class HashTable:
                  key_size: int = 0, value_size: int = 0, capacity: int = MIN_CAPACITY,
                  max_load_factor: float = 0.5, min_load_factor: float = 0.10,
                  shrink_factor: float = 0.4, grow_factor: float = 2.0,
-                 kv_grow_factor: float = 1.3) -> None:
+                 rehash_threshold: float = 0.75, kv_grow_factor: float = 1.3) -> None:
         # the load of the ht (.table) shall be between 0.25 and 0.5, so it is fast and has few collisions.
         # it is cheap to have a low hash table load, because .table only stores uint32_t indices into the
         # .keys and .values array.
         # the keys/values arrays have bigger elements and are not hash tables, thus collisions and load
         # factor are no concern there. the kv_grow_factor can be relatively small.
+        # tombstones count towards the load of the ht, but unlike used entries they can be dropped by
+        # rehashing at the same capacity. rehash_threshold decides between the two: only grow the ht if
+        # the used entries alone occupy more than that fraction of the load budget.
         if key_size < 4:
             raise ValueError("key_size must be specified and must be >= 4.")
         if not value_size:
@@ -64,6 +67,7 @@ cdef class HashTable:
         self.min_load_factor = min_load_factor
         self.shrink_factor = shrink_factor
         self.grow_factor = grow_factor
+        self.rehash_threshold = rehash_threshold
         self.initial_capacity = capacity
         self.capacity = 0
         self.used = 0
@@ -162,7 +166,10 @@ cdef class HashTable:
         self.table[index] = kv_index  # _lookup_index has set index to a free bucket
 
         if self.used + self.tombstones > self.capacity * self.max_load_factor:
-            self._resize_table(int(self.capacity * self.grow_factor))
+            if self.used > self.capacity * self.max_load_factor * self.rehash_threshold:
+                self._resize_table(int(self.capacity * self.grow_factor))
+            else:  # mostly tombstones: rehashing at the same capacity drops them
+                self._resize_table(self.capacity)
 
     def __contains__(self, key: bytes) -> bool:
         if len(key) != self.ksize:

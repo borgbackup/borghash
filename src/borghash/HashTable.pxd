@@ -4,7 +4,7 @@ cdef class HashTable:
     cdef int ksize, vsize
     cdef readonly size_t capacity, used
     cdef size_t initial_capacity, tombstones
-    cdef float max_load_factor, min_load_factor, shrink_factor, grow_factor
+    cdef float max_load_factor, min_load_factor, shrink_factor, grow_factor, rehash_threshold
     cdef uint32_t* table
     cdef uint32_t kv_capacity, kv_used
     cdef float kv_grow_factor
