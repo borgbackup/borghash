@@ -1,4 +1,5 @@
 import hashlib
+import struct
 
 import pytest
 
@@ -201,6 +202,21 @@ def test_tombstones_do_not_grow_table():
     assert len(ht) == 35000
     assert ht.capacity == 100000
     assert set(ht.items()) == {(key, value1) for key in keys[25000:]}
+
+
+def test_tombstone_is_recycled():
+    def K(i):
+        # _get_index is key32 % capacity, so these all want bucket 7 and form one probe chain
+        return struct.pack(">I", 1000 * i + 7) + bytes(28)
+
+    ht = HashTable(key_size=32, value_size=4, capacity=1000)
+    for i in range(3):
+        ht[K(i)] = value1  # buckets 7, 8, 9
+    del ht[K(1)]  # bucket 8 becomes a tombstone
+    ht[K(3)] = value1  # must reuse bucket 8, not take bucket 10
+    linear = ht.stats["linear"]
+    assert ht[K(3)] == value1
+    assert ht.stats["linear"] - linear == 2  # visited buckets 7 and 8
 
 
 def test_used_entries_grow_table():

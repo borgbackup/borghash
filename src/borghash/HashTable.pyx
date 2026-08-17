@@ -115,24 +115,32 @@ cdef class HashTable:
         cdef uint32_t key32 = (key[0] << 24) | (key[1] << 16) | (key[2] << 8) | key[3]
         return key32 % self.capacity
 
-    cdef int _lookup_index(self, uint8_t* key_ptr, size_t* index_ptr):
+    cdef int _lookup_index(self, uint8_t* key_ptr, size_t* index_ptr, size_t* tombstone_ptr = NULL):
         """
         search for a specific key.
         if found, return 1 and set *index_ptr to the index of the bucket in self.table.
         if not found, return 0 and set *index_ptr to the index of a free bucket in self.table.
+        if not found and tombstone_ptr is given, set *tombstone_ptr to the index of the first
+        tombstone bucket that was passed on the way, or to self.capacity if there was none.
         """
         cdef size_t index = self._get_index(key_ptr)
+        cdef size_t first_tombstone = self.capacity  # == "none", indices are < self.capacity
         cdef uint32_t kv_index
         self.stats_lookup += 1
         while (kv_index := self.table[index]) != FREE_BUCKET:
             self.stats_linear += 1
-            if kv_index != TOMBSTONE_BUCKET and memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
+            if kv_index == TOMBSTONE_BUCKET:
+                if first_tombstone == self.capacity:
+                    first_tombstone = index
+            elif memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
                 if index_ptr:
                     index_ptr[0] = index
                 return 1  # found
             index = (index + 1) % self.capacity
         if index_ptr:
             index_ptr[0] = index
+        if tombstone_ptr:
+            tombstone_ptr[0] = first_tombstone
         return 0  # not found
 
     def __setitem__(self, key: bytes, value: bytes) -> None:
@@ -142,9 +150,9 @@ cdef class HashTable:
         cdef uint8_t* key_ptr = <uint8_t*> key
         cdef uint8_t* value_ptr = <uint8_t*> value
         cdef uint32_t kv_index
-        cdef size_t index
+        cdef size_t index, tombstone_index
         self.stats_set += 1
-        if self._lookup_index(key_ptr, &index):
+        if self._lookup_index(key_ptr, &index, &tombstone_index):
             kv_index = self.table[index]
             memcpy(self.values + kv_index * self.vsize, value_ptr, self.vsize)
             return
@@ -163,6 +171,9 @@ cdef class HashTable:
         self.kv_used += 1
 
         self.used += 1
+        if tombstone_index < self.capacity:  # prefer a tombstone bucket, it is dead weight otherwise
+            index = tombstone_index
+            self.tombstones -= 1
         self.table[index] = kv_index  # _lookup_index has set index to a free bucket
 
         if self.used + self.tombstones > self.capacity * self.max_load_factor:

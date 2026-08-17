@@ -14,6 +14,6 @@ cdef class HashTable:
     cdef int stats_resize_table, stats_resize_kv
 
     cdef size_t _get_index(self, uint8_t* key)
-    cdef int _lookup_index(self, uint8_t* key_ptr, size_t* index_ptr)
+    cdef int _lookup_index(self, uint8_t* key_ptr, size_t* index_ptr, size_t* tombstone_ptr = *)
     cdef void _resize_table(self, size_t new_capacity)
     cdef void _resize_kv(self, size_t new_capacity)
