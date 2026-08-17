@@ -1,7 +1,7 @@
 BorgHash
 ========
 
-Memory-efficient hashtable implementations as a Python library implemented in Cython.
+Memory-efficient hashtable implementations for Python, written in Cython.
 
 HashTable
 ---------
@@ -11,12 +11,12 @@ HashTable
 Keys and Values
 ~~~~~~~~~~~~~~~
 
-The keys MUST be perfectly random ``bytes`` of arbitrary but fixed length, like from a cryptographic hash (SHA-256, HMAC-SHA-256, ...).
-The implementation relies on this "perfectly random" property and does not implement its own hash function; it just takes 32 bits from the given key.
+The keys MUST be perfectly random ``bytes`` of arbitrary but fixed length (at least 4 bytes), like from a cryptographic hash (SHA-256, HMAC-SHA-256, ...).
+The implementation relies on this "perfectly random" property and does not implement its own hash function; it just takes the leading 32 bits of the given key.
 
 The values are ``bytes`` of arbitrary but fixed length.
 
-The lengths of the keys and values are defined when creating a ``HashTable`` instance; thereafter, the lengths must always match the defined size.
+The lengths of the keys and values are defined when creating a ``HashTable`` instance; thereafter, the lengths must always match the defined sizes.
 
 Implementation details
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -38,7 +38,7 @@ Memory allocated
 For a hashtable load factor of 0.1 – 0.5, a kv array growth factor of 1.3, and
 N kv pairs, memory usage in bytes is approximately:
 
-- Hashtable: from ``N * 4 / 0.5`` to ``N * 4 / 0.1``
+- hashtable: from ``N * 4 / 0.5`` to ``N * 4 / 0.1``
 - Keys/Values: from ``N * len(key + value) * 1.0`` to ``N * len(key + value) * 1.3``
 - Overall: from ``N * (8 + len(key + value))`` to ``N * (40 + len(key + value) * 1.3)``
 
@@ -63,6 +63,11 @@ by Python's ``struct`` module using a given format string.
 When setting a value, it is automatically serialized. When a value is returned,
 it will be a ``namedtuple`` of the given type.
 
+The ``byte_order`` argument (``"little"`` by default, also ``"big"``,
+``"network"`` or ``"native"``) selects the byte order used for serialization,
+so a serialized hashtable can be read back on a machine with a different
+native byte order.
+
 Persistence
 ~~~~~~~~~~~
 
@@ -73,15 +78,50 @@ When a ``HashTableNT`` is saved to disk, only the non-deleted entries are
 persisted. When it is loaded from disk, a new hashtable and new, dense
 kv arrays are built; thus, kv indices will be different!
 
+Iterating over key-prefix partitions
+------------------------------------
+
+``items()`` accepts two optional keyword arguments to iterate over only the
+items whose keys start with a given bit prefix:
+
+- ``prefix_bits``: number of leading key bits to compare, ``0 .. 32``
+  (``0``, the default, means: no filtering)
+- ``prefix``: expected value of these leading bits, given in the integer's
+  low bits, thus ``0 <= prefix < 2 ** prefix_bits``
+
+As the keys are perfectly random, this partitions the items into
+``2 ** prefix_bits`` roughly equally sized, disjoint sets, and iterating over
+all prefixes visits every item exactly once. Only the matching keys/values are
+built as Python objects, so a huge hashtable can be processed in batches with a
+small memory footprint::
+
+    prefix_bits = 8  # 256 partitions
+    for prefix in range(2 ** prefix_bits):
+        for key, value in ht.items(prefix_bits=prefix_bits, prefix=prefix):
+            ...  # process one partition
+
 API
 ---
 
-HashTable / HashTableNT have an API similar to a dict:
+HashTable and HashTableNT have an API similar to a dict:
 
+- ``__init__(items=None, ...)``: optionally fills the new table from a dict or
+  an iterable of ``(key, value)`` pairs
 - ``__setitem__`` / ``__getitem__`` / ``__delitem__`` / ``__contains__``
-- ``get()``, ``pop()``, ``setdefault()``
-- ``items()``, ``len()``
-- ``read()``, ``write()``, ``size()``
+- ``get()``, ``pop()``, ``setdefault()``, ``clear()``
+- ``items()`` (see above), ``__len__``
+- ``stats`` property with operation/resize counters
+
+Additionally, both offer access to the stable kv indices (see
+"Implementation details"), which can be used as memory-efficient references:
+
+- ``k_to_idx()``, ``idx_to_k()``, ``kv_to_idx()``, ``idx_to_kv()``
+
+HashTableNT also has:
+
+- ``update()`` (like ``dict.update()``)
+- ``write()``, ``read()``, ``size()`` (see "Persistence"; ``size()`` gives a
+  rough worst-case estimate of the on-disk size)
 
 Example code
 ------------
@@ -111,11 +151,27 @@ Example code
 
 Building / Installing
 ---------------------
-::
 
-    python setup.py build_ext --inplace
+To install the latest release from PyPI::
+
+    pip install borghash
+
+Building from a git checkout requires Cython::
+
+    pip install -r requirements.d/dev.txt
+
+For development, install in editable mode (this also cythonizes and builds the
+extension modules in place)::
+
+    pip install -e . --no-build-isolation
+
+To build a package and install it::
+
     python -m build
     pip install dist/borghash*.tar.gz
+
+The generated C files are included in the sdist, thus installing the built
+package does not require Cython.
 
 
 Want a demo?
@@ -145,8 +201,8 @@ There might be missing features or optimization potential; feedback is welcome!
 Borg?
 -----
 
-Please note that this code is currently **not** used by the stable release of
-BorgBackup (aka "borg"), but it might be used by Borg's master branch in the future.
+BorgBackup (aka "borg") uses ``borghash`` on its master branch (the borg 2
+pre-releases), e.g. for the chunks index.
 
 License
 -------
