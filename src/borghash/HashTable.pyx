@@ -200,7 +200,8 @@ cdef class HashTable:
             # Resize down if necessary
             if self.used < self.capacity * self.min_load_factor:
                 new_capacity = max(int(self.capacity * self.shrink_factor), MIN_CAPACITY)
-                self._resize_table(new_capacity)
+                if new_capacity < self.capacity:  # at the MIN_CAPACITY floor, this would rehash per delete
+                    self._resize_table(new_capacity)
         else:
             raise KeyError("Key not found")
 
