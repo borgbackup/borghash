@@ -1,10 +1,10 @@
-# badge: https://github.com/borgbackup/borgstore/workflows/CI/badge.svg?branch=master
+# badge: https://github.com/borgbackup/borghash/workflows/CI/badge.svg?branch=main
 
 name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
     paths:
     - '**.py'
     - '**.pyx'
@@ -14,7 +14,7 @@ on:
     - '**.ini'
     - 'requirements.d/*'
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
     paths:
     - '**.py'
     - '**.pyx'

@@ -27,7 +27,7 @@ dependencies = []
 
 [project.urls]
 "Homepage" = "https://github.com/borgbackup/borghash"
-"Changelog" = "https://github.com/borgbackup/borghash/blob/master/changes.rst"
+"Changelog" = "https://github.com/borgbackup/borghash/blob/main/CHANGES.rst"
 
 [project.scripts]
 borghash-demo = "borghash.__main__:demo"
