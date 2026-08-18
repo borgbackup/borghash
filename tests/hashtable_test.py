@@ -1,4 +1,5 @@
 import hashlib
+import struct
 
 import pytest
 
@@ -172,6 +173,68 @@ def test_stats(ht):
     assert ht.stats["lookup"] == 3
     list(ht.items())
     assert ht.stats["iter"] == 1
+
+
+def test_delete_at_min_capacity_does_not_rehash(ht):
+    # a table that is already at the MIN_CAPACITY floor must not rehash on every delete
+    keys = [H2(i) for i in range(200)]
+    for key in keys:
+        ht[key] = value1
+    capacity, resizes = ht.capacity, ht.stats["resize_table"]
+    for key in keys:
+        del ht[key]
+    assert len(ht) == 0
+    assert ht.capacity == capacity
+    assert ht.stats["resize_table"] == resizes
+
+
+def test_tombstones_do_not_grow_table():
+    # hitting the load threshold with mostly tombstones must rehash at the same capacity, not grow
+    ht = HashTable(key_size=32, value_size=4, capacity=100000)
+    keys = [H2(i) for i in range(60000)]
+    for key in keys[:40000]:
+        ht[key] = value1
+    for key in keys[:25000]:  # 25000 tombstones, 15000 entries left
+        del ht[key]
+    assert ht.capacity == 100000
+    for key in keys[40000:]:  # 20000 new entries, crossing max_load_factor on the way
+        ht[key] = value1
+    assert len(ht) == 35000
+    assert ht.capacity == 100000
+    assert set(ht.items()) == {(key, value1) for key in keys[25000:]}
+
+
+def test_tombstone_is_recycled():
+    def K(i):
+        # _get_index is key32 % capacity, so these all want bucket 7 and form one probe chain
+        return struct.pack(">I", 1000 * i + 7) + bytes(28)
+
+    ht = HashTable(key_size=32, value_size=4, capacity=1000)
+    for i in range(3):
+        ht[K(i)] = value1  # buckets 7, 8, 9
+    del ht[K(1)]  # bucket 8 becomes a tombstone
+    ht[K(3)] = value1  # must reuse bucket 8, not take bucket 10
+    linear = ht.stats["linear"]
+    assert ht[K(3)] == value1
+    assert ht.stats["linear"] - linear == 2  # visited buckets 7 and 8
+
+
+def test_used_entries_grow_table():
+    ht = HashTable(key_size=32, value_size=4, capacity=1000)
+    for i in range(600):  # more than capacity * max_load_factor
+        ht[H2(i)] = value1
+    assert ht.capacity > 1000
+
+
+def test_delete_shrinks_table():
+    ht = HashTable(key_size=32, value_size=4, capacity=100000)
+    keys = [H2(i) for i in range(20000)]
+    for key in keys:
+        ht[key] = value1
+    assert ht.capacity == 100000
+    for key in keys[:19000]:
+        del ht[key]
+    assert ht.capacity < 100000
 
 
 def test_k_to_idx(ht12):

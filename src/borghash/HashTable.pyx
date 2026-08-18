@@ -47,12 +47,15 @@ cdef class HashTable:
                  key_size: int = 0, value_size: int = 0, capacity: int = MIN_CAPACITY,
                  max_load_factor: float = 0.5, min_load_factor: float = 0.10,
                  shrink_factor: float = 0.4, grow_factor: float = 2.0,
-                 kv_grow_factor: float = 1.3) -> None:
+                 rehash_threshold: float = 0.75, kv_grow_factor: float = 1.3) -> None:
         # the load of the ht (.table) shall be between 0.25 and 0.5, so it is fast and has few collisions.
         # it is cheap to have a low hash table load, because .table only stores uint32_t indices into the
         # .keys and .values array.
         # the keys/values arrays have bigger elements and are not hash tables, thus collisions and load
         # factor are no concern there. the kv_grow_factor can be relatively small.
+        # tombstones count towards the load of the ht, but unlike used entries they can be dropped by
+        # rehashing at the same capacity. rehash_threshold decides between the two: only grow the ht if
+        # the used entries alone occupy more than that fraction of the load budget.
         if key_size < 4:
             raise ValueError("key_size must be specified and must be >= 4.")
         if not value_size:
@@ -64,6 +67,7 @@ cdef class HashTable:
         self.min_load_factor = min_load_factor
         self.shrink_factor = shrink_factor
         self.grow_factor = grow_factor
+        self.rehash_threshold = rehash_threshold
         self.initial_capacity = capacity
         self.capacity = 0
         self.used = 0
@@ -111,24 +115,32 @@ cdef class HashTable:
         cdef uint32_t key32 = (key[0] << 24) | (key[1] << 16) | (key[2] << 8) | key[3]
         return key32 % self.capacity
 
-    cdef int _lookup_index(self, uint8_t* key_ptr, size_t* index_ptr):
+    cdef int _lookup_index(self, uint8_t* key_ptr, size_t* index_ptr, size_t* tombstone_ptr = NULL):
         """
         search for a specific key.
         if found, return 1 and set *index_ptr to the index of the bucket in self.table.
         if not found, return 0 and set *index_ptr to the index of a free bucket in self.table.
+        if not found and tombstone_ptr is given, set *tombstone_ptr to the index of the first
+        tombstone bucket that was passed on the way, or to self.capacity if there was none.
         """
         cdef size_t index = self._get_index(key_ptr)
+        cdef size_t first_tombstone = self.capacity  # == "none", indices are < self.capacity
         cdef uint32_t kv_index
         self.stats_lookup += 1
         while (kv_index := self.table[index]) != FREE_BUCKET:
             self.stats_linear += 1
-            if kv_index != TOMBSTONE_BUCKET and memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
+            if kv_index == TOMBSTONE_BUCKET:
+                if first_tombstone == self.capacity:
+                    first_tombstone = index
+            elif memcmp(self.keys + kv_index * self.ksize, key_ptr, self.ksize) == 0:
                 if index_ptr:
                     index_ptr[0] = index
                 return 1  # found
             index = (index + 1) % self.capacity
         if index_ptr:
             index_ptr[0] = index
+        if tombstone_ptr:
+            tombstone_ptr[0] = first_tombstone
         return 0  # not found
 
     def __setitem__(self, key: bytes, value: bytes) -> None:
@@ -138,9 +150,9 @@ cdef class HashTable:
         cdef uint8_t* key_ptr = <uint8_t*> key
         cdef uint8_t* value_ptr = <uint8_t*> value
         cdef uint32_t kv_index
-        cdef size_t index
+        cdef size_t index, tombstone_index
         self.stats_set += 1
-        if self._lookup_index(key_ptr, &index):
+        if self._lookup_index(key_ptr, &index, &tombstone_index):
             kv_index = self.table[index]
             memcpy(self.values + kv_index * self.vsize, value_ptr, self.vsize)
             return
@@ -159,10 +171,16 @@ cdef class HashTable:
         self.kv_used += 1
 
         self.used += 1
+        if tombstone_index < self.capacity:  # prefer a tombstone bucket, it is dead weight otherwise
+            index = tombstone_index
+            self.tombstones -= 1
         self.table[index] = kv_index  # _lookup_index has set index to a free bucket
 
         if self.used + self.tombstones > self.capacity * self.max_load_factor:
-            self._resize_table(int(self.capacity * self.grow_factor))
+            if self.used > self.capacity * self.max_load_factor * self.rehash_threshold:
+                self._resize_table(int(self.capacity * self.grow_factor))
+            else:  # mostly tombstones: rehashing at the same capacity drops them
+                self._resize_table(self.capacity)
 
     def __contains__(self, key: bytes) -> bool:
         if len(key) != self.ksize:
@@ -200,7 +218,8 @@ cdef class HashTable:
             # Resize down if necessary
             if self.used < self.capacity * self.min_load_factor:
                 new_capacity = max(int(self.capacity * self.shrink_factor), MIN_CAPACITY)
-                self._resize_table(new_capacity)
+                if new_capacity < self.capacity:  # at the MIN_CAPACITY floor, this would rehash per delete
+                    self._resize_table(new_capacity)
         else:
             raise KeyError("Key not found")
 
