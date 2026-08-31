@@ -186,10 +186,16 @@ an annotated, signed tag named like the version (no ``v`` prefix) onto the
     git push origin 0.3.0
 
 Pushing the tag runs ``.github/workflows/release.yml``, which builds the sdist,
-checks that it is complete and installable, and creates a *draft* GitHub
-release with it. The upload to PyPI happens in the ``pypi`` job, which uses
-trusted publishing (no API token) and waits for an approval if the ``pypi``
-environment has required reviewers configured.
+checks that it is complete and installable, attests its build provenance and
+creates a *draft* GitHub release with the sdist and the attestation bundle
+(``borghash-0.3.0.tar.gz.jsonl``). The upload to PyPI happens in the ``pypi``
+job, which uses trusted publishing (no API token) and waits for an approval if
+the ``pypi`` environment has required reviewers configured.
+
+The attestation says that this workflow built this sdist from this repository,
+and is checked with::
+
+    gh attestation verify --owner borgbackup borghash-0.3.0.tar.gz
 
 Finally, write the release notes and publish the draft release.
 
