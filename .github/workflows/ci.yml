@@ -24,8 +24,16 @@ on:
     - '**.ini'
     - 'requirements.d/*'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   linux:
+    name: Linux, Python ${{ matrix.python-version }}
 
     strategy:
       fail-fast: true
@@ -51,12 +59,13 @@ jobs:
     continue-on-error: ${{ matrix.allow-failure || false }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
         # just fetching 1 commit is not enough for setuptools-scm, so we fetch all
         fetch-depth: 0
+        persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install Python requirements

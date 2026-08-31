@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      # default-days also covers patch releases and actions not using semver.
+      default-days: 14
+      semver-minor-days: 30
+      semver-major-days: 90
+    groups:
+      actions:
+        patterns:
+          - "*"
+  - package-ecosystem: "pip"
+    directory: "/requirements.d"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      # default-days also covers patch releases and packages not using semver.
+      default-days: 14
+      semver-minor-days: 30
+      semver-major-days: 90
+    groups:
+      pip-dependencies:
+        patterns:
+          - "*"
