@@ -1,6 +1,23 @@
 Changelog
 =========
 
+Version 0.2.1 (2026-08-31)
+--------------------------
+
+Fixes / improvements:
+
+- hash table resize policy: stop pointless and oversized rehashes
+- reuse tombstone buckets for new entries
+- do not grow the hash table when it is mostly tombstones
+- only shrink the hash table when the new capacity is actually smaller
+
+Other changes:
+
+- add a release workflow (sdist build, pypi, provenance attestation, gh release)
+- CI: harden the workflows, add dependabot
+- update docs
+
+
 Version 0.2.0 (2026-08-11)
 --------------------------
 
